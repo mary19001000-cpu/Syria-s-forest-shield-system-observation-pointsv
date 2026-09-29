@@ -1,0 +1,21 @@
+{
+  "name": "درع الغابة - النظام الذكي لمكافحة الحرائق",
+  "short_name": "درع الغابة",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0a2a0a",
+  "theme_color": "#0a2a0a",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

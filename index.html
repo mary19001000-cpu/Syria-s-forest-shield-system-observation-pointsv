@@ -1,0 +1,2573 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a2a0a">
+    <title>درع الغابة v3.0 - النظام الذكي لمكافحة الحرائق</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="assets/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- Leaflet & Draw -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        body { background: #0a0a0a; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        #splashScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(145deg, #0d2a0d, #1a3a1a); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; transition: opacity 0.8s ease, visibility 0.8s ease; padding: 20px; text-align: center; direction: rtl; }
+        #splashScreen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+        #splashLogo { width: 120px; height: 120px; background: #4CAF50; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 4rem; box-shadow: 0 0 40px rgba(76, 175, 80, 0.3); margin-bottom: 20px; border: 3px solid #66bb6a; animation: pulseLogo 2s infinite ease-in-out; }
+        @keyframes pulseLogo { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        #splashTitle { font-size: 1.8rem; font-weight: 700; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,0.6); margin-bottom: 8px; }
+        #splashSub { font-size: 1.1rem; color: #b2dfdb; margin-bottom: 20px; }
+        .divider { width: 60px; height: 3px; background: linear-gradient(90deg, #4CAF50, #81c784); border-radius: 2px; margin: 10px auto 20px; }
+        #splashFooter { font-size: 0.85rem; color: #a0a0a0; border-top: 1px solid #2a4a2a; padding-top: 15px; width: 80%; max-width: 300px; margin-top: 10px; }
+        #splashFooter span { color: #81c784; }
+        #splashLoader { margin-top: 25px; width: 150px; height: 3px; background: #2a3a2a; border-radius: 4px; overflow: hidden; }
+        #splashLoader::after { content: ''; display: block; width: 40%; height: 100%; background: #4CAF50; border-radius: 4px; animation: loadBar 1.8s infinite ease-in-out; }
+        @keyframes loadBar { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+
+        header { background: #111; padding: 8px; text-align: center; border-bottom: 2px solid #4CAF50; z-index: 20; position: relative; }
+        header h1 { font-size: 1.2rem; color: #4CAF50; }
+
+        .main-layout { display: flex; flex: 1; min-height: 0; position: relative; }
+        #map { flex: 1; min-height: 45vh; z-index: 1; background: #1a1a1a; }
+
+        .sidebar { width: 340px; background: #111; border-left: 2px solid #333; overflow-y: auto; display: flex; flex-direction: column; padding: 8px; gap: 8px; }
+        .sidebar-header { background: #1a1a1a; padding: 10px; text-align: center; font-weight: bold; color: #4CAF50; border-radius: 6px; border: 1px solid #333; }
+        .card { background: #1a1a1a; padding: 12px; border-radius: 8px; border: 1px solid #333; }
+        .card-title { color: #2196F3; font-weight: bold; margin-bottom: 8px; font-size: 0.95rem; cursor: pointer; display: flex; justify-content: space-between; }
+        .card-title .toggle-icon { transition: transform 0.3s; }
+        .card.collapsed .card-content { display: none; }
+        .card.collapsed .toggle-icon { transform: rotate(-90deg); }
+        .card-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #222; font-size: 0.9rem; }
+        .card-value { color: #fff; font-weight: bold; }
+        .card-value.hot { color: #f44336; }
+        .card-value.wind { color: #FF9800; }
+        .compass { width: 70px; height: 70px; margin: 0 auto 8px; position: relative; border: 2px solid #444; border-radius: 50%; background: #0a0a0a; }
+        .compass-arrow { position: absolute; top: 50%; left: 50%; width: 2px; height: 25px; background: #f44336; transform-origin: bottom center; transform: translate(-50%, -100%) rotate(0deg); transition: transform 1s ease; }
+        .compass-arrow::after { content: ''; position: absolute; top: -6px; left: -4px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid #f44336; }
+        .spread-card { border-color: #d32f2f; background: #1a0a0a; }
+        .spread-value { text-align: center; font-size: 1.8rem; font-weight: bold; color: #f44336; }
+        .integration-btns { display: flex; flex-direction: column; gap: 6px; }
+        .int-btn { display: flex; align-items: center; gap: 8px; padding: 10px; background: #222; border: 1px solid #444; border-radius: 6px; color: #fff; cursor: pointer; font-size: 0.9rem; width: 100%; text-align: right; }
+        .int-btn.disabled { opacity: 0.4; cursor: not-allowed; background: #1a1a1a; }
+        .whatsapp-section { background: #0d1f0d; border: 1px solid #2e7d32; border-radius: 8px; padding: 10px; }
+
+        .layer-control-btn { position: absolute; top: 10px; right: 10px; z-index: 999; background: #1a1a1a; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; color: #fff; cursor: pointer; font-size: 0.8rem; display: flex; align-items: center; gap: 6px; }
+        .layer-control-btn:hover { background: #2a2a2a; }
+        .layer-panel { position: absolute; top: 50px; right: 10px; z-index: 999; background: #1a1a1a; border: 1px solid #444; border-radius: 8px; padding: 12px; min-width: 200px; display: none; max-height: 70vh; overflow-y: auto; }
+        .layer-panel.active { display: block; }
+        .layer-group { margin-bottom: 12px; }
+        .layer-group-title { color: #4CAF50; font-weight: bold; font-size: 0.85rem; margin-bottom: 6px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+        .layer-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 0.8rem; color: #ccc; cursor: pointer; }
+        .layer-item:hover { color: #fff; }
+        .layer-item input[type="radio"] { accent-color: #4CAF50; width: 16px; height: 16px; cursor: pointer; }
+        .layer-item input[type="checkbox"] { accent-color: #4CAF50; width: 16px; height: 16px; cursor: pointer; }
+
+        #firestationInfo { background: #1a2a1a; border: 1px solid #ff6f00; border-radius: 8px; padding: 10px; margin: 6px 0; display: none; }
+        #firestationInfo .info-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 0.85rem; color: #ccc; }
+        #firestationInfo .info-row .label { color: #ff6f00; }
+        #firestationInfo .info-row .value { color: #fff; font-weight: bold; }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 15px; }
+        .modal-overlay.active { display: flex; }
+        .modal-box { background: #1a1a1a; border: 1px solid #333; border-radius: 10px; padding: 20px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
+        .modal-title { color: #4CAF50; font-size: 1.2rem; margin-bottom: 12px; text-align: center; }
+        input, select, textarea { width: 100%; padding: 10px; margin-bottom: 8px; border-radius: 5px; border: 1px solid #444; background: #222; color: #fff; font-size: 0.9rem; }
+        input:focus, select:focus, textarea:focus { outline: 2px solid #4CAF50; border-color: transparent; }
+
+        .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 6px; font-size: 0.9rem; z-index: 2000; display: none; max-width: 90%; text-align: center; }
+        .toast.show { display: block; }
+        .toast-success { background: #2e7d32; }
+        .toast-error { background: #c62828; }
+        .toast-warning { background: #ef6c00; }
+        .toast-info { background: #1565c0; }
+
+        .report-mini { background: #1a0a0a; border: 1px solid #d32f2f; border-radius: 6px; padding: 8px; margin-bottom: 6px; cursor: pointer; transition: all 0.3s; }
+        .report-mini:hover { background: #2a1a1a; }
+        .report-mini.latest { background: #0a1a3a; border-color: #2196F3; }
+        .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.65rem; margin-right: 4px; }
+        .badge-off { background: #333; color: #666; }
+        .badge-on { background: #4CAF50; color: #fff; }
+        .badge-firestation { background: #ff6f00; color: #fff; }
+        .badge-nasa { background: #1a237e; color: #fff; }
+        .badge-nasa-active { background: #d32f2f; color: #fff; animation: pulseBadge 1.5s infinite; }
+        @keyframes pulseBadge { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+        #lastUpdate { text-align: center; color: #555; font-size: 0.7rem; padding: 4px; }
+        .status-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; color: #fff; }
+        .status-new { background: #f44336; }
+        .status-processing { background: #FF9800; }
+        .status-extinguished { background: #4CAF50; }
+
+        .fire-item { padding: 8px; margin-bottom: 6px; background: #222; border-radius: 4px; border-right: 3px solid #f44336; cursor: pointer; }
+        .fire-item:hover { background: #2a2a2a; }
+        .fire-item.selected { border-color: #4CAF50; background: #1a2a1a; }
+        .fire-item .loc { font-size: 0.7rem; color: #888; }
+        .mgmt-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #222; font-size: 0.85rem; }
+        .mgmt-row .label { color: #aaa; }
+        .mgmt-row .value { color: #fff; font-weight: bold; }
+        .crew-badge { display: inline-block; background: #2196F3; color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; margin: 2px; }
+        .station-actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+        .station-actions .btn-sm { padding: 4px 10px; font-size: 0.7rem; border-radius: 4px; border: none; cursor: pointer; color: #fff; }
+        .btn-sm-danger { background: #d32f2f; }
+        .btn-sm-warning { background: #ff6f00; }
+        .btn-sm-info { background: #2196F3; }
+        .location-status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.65rem; font-weight: bold; }
+        .loc-active { background: #4CAF50; color: #fff; }
+        .loc-inactive { background: #555; color: #aaa; }
+        .loc-error { background: #d32f2f; color: #fff; }
+        #locationAccuracy { font-size: 0.7rem; color: #888; text-align: center; margin-top: 2px; }
+
+        .nasa-status-bar { background: #0d1b3e; border: 1px solid #1a237e; border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+        .nasa-status-bar .status-title { color: #5c6bc0; font-weight: bold; font-size: 0.8rem; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+        .nasa-status-bar .status-row { display: flex; justify-content: space-between; font-size: 0.75rem; padding: 2px 0; }
+        .nasa-status-bar .status-label { color: #7986cb; }
+        .nasa-status-bar .status-value { color: #fff; font-weight: bold; }
+        .nasa-status-bar .status-value.ok { color: #4CAF50; }
+        .nasa-status-bar .status-value.warn { color: #FF9800; }
+        .nasa-status-bar .status-value.error { color: #f44336; }
+        .nasa-status-bar .nasa-actions { display: flex; gap: 4px; margin-top: 6px; }
+        .nasa-status-bar .nasa-actions button { flex: 1; padding: 4px 8px; font-size: 0.7rem; border: none; border-radius: 4px; cursor: pointer; color: #fff; }
+        .nasa-status-bar .nasa-actions .btn-test { background: #1565c0; }
+        .nasa-status-bar .nasa-actions .btn-refresh { background: #2e7d32; }
+        .nasa-status-bar .nasa-actions .btn-sim { background: #6a1b9a; }
+
+        .error-log { background: #1a0a0a; border: 1px solid #d32f2f; border-radius: 6px; padding: 8px; margin-top: 8px; max-height: 150px; overflow-y: auto; display: none; }
+        .error-log.active { display: block; }
+        .error-log .log-entry { font-size: 0.7rem; padding: 2px 0; border-bottom: 1px solid #2a1a1a; color: #ccc; }
+        .error-log .log-entry.error { color: #f44336; }
+        .error-log .log-entry.warn { color: #FF9800; }
+        .error-log .log-entry.info { color: #4CAF50; }
+        .error-log .log-time { color: #666; font-size: 0.6rem; }
+
+        .nasa-fire-alert { background: linear-gradient(135deg, #1a0a0a, #2a0a0a); border: 2px solid #d32f2f; border-radius: 8px; padding: 10px; margin-bottom: 8px; animation: alertPulse 2s infinite; }
+        @keyframes alertPulse { 0%, 100% { border-color: #d32f2f; box-shadow: 0 0 5px rgba(211,47,47,0.3); } 50% { border-color: #ff5252; box-shadow: 0 0 15px rgba(211,47,47,0.6); } }
+        .nasa-fire-alert .alert-title { color: #f44336; font-weight: bold; font-size: 0.9rem; display: flex; align-items: center; gap: 6px; }
+        .nasa-fire-alert .alert-meta { color: #aaa; font-size: 0.75rem; margin-top: 4px; }
+        .nasa-fire-alert .alert-source { color: #5c6bc0; font-size: 0.7rem; margin-top: 2px; }
+
+        .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #222; }
+        .toggle-switch { position: relative; width: 40px; height: 22px; background: #444; border-radius: 11px; cursor: pointer; transition: 0.3s; flex-shrink: 0; }
+        .toggle-switch.active { background: #4CAF50; }
+        .toggle-switch::after { content: ''; position: absolute; width: 18px; height: 18px; background: #fff; border-radius: 50%; top: 2px; left: 2px; transition: 0.3s; }
+        .toggle-switch.active::after { left: 20px; }
+
+        #btnFireManagement.active { background: #4CAF50; border-color: #4CAF50; animation: pulseGreen 1.5s infinite; }
+        @keyframes pulseGreen { 0%, 100% { box-shadow: 0 0 0 0 rgba(76,175,80,0.7); } 50% { box-shadow: 0 0 0 10px rgba(76,175,80,0); } }
+
+        .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #111; display: flex; flex-wrap: wrap; justify-content: center; padding: 6px; gap: 4px; z-index: 100; border-top: 2px solid #333; }
+        .bottom-bar .btn { padding: 6px 12px; border: none; border-radius: 4px; font-size: 0.75rem; cursor: pointer; color: #fff; transition: 0.2s; }
+        .btn-danger { background: #d32f2f; }
+        .btn-location { background: #00bcd4; }
+        .btn-orange { background: #ff6f00; }
+        .btn-purple { background: #9C27B0; }
+        .btn-firestation { background: #ff6f00; }
+        .btn-management { background: #4CAF50; }
+        .btn-nasa { background: #1a237e; }
+        .btn-clear { background: #555; }
+        .btn-blue { background: #2196F3; }
+        .btn-whatsapp { background: #25D366; }
+        .btn-info { background: #2196F3; }
+        .btn-draw-active { background: #f44336; }
+
+        #floatingReportBtn { position: fixed; bottom: 80px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: #f44336; color: #fff; border: none; font-size: 1.8rem; box-shadow: 0 4px 20px rgba(244,67,54,0.6); z-index: 500; display: none; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s; }
+        #floatingReportBtn:hover { transform: scale(1.1); }
+
+        /* ===== أنماط طبقة الطقس ===== */
+        .weather-marker { background: transparent !important; border: none !important; }
+        .weather-legend { position: absolute; bottom: 90px; left: 10px; z-index: 998; background: rgba(20,20,20,0.92); border: 1px solid #444; border-radius: 8px; padding: 10px; font-size: 0.7rem; color: #ccc; max-width: 180px; display: none; }
+        .weather-legend.active { display: block; }
+        .weather-legend .legend-title { color: #4CAF50; font-weight: bold; margin-bottom: 6px; text-align: center; border-bottom: 1px solid #333; padding-bottom: 4px; }
+        .weather-legend .legend-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+        .weather-legend .legend-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+
+        @media (max-width: 768px) {
+            .main-layout { flex-direction: column; }
+            .sidebar { width: 100%; max-height: 40vh; }
+            .bottom-bar .btn { padding: 6px 10px; font-size: 0.7rem; }
+            #splashTitle { font-size: 1.4rem; }
+            #splashSub { font-size: 0.95rem; }
+            #splashLogo { width: 90px; height: 90px; font-size: 3.2rem; }
+            #floatingReportBtn { width: 55px; height: 55px; font-size: 1.5rem; bottom: 70px; right: 15px; }
+            .layer-panel { right: 5px; min-width: 160px; }
+            .weather-legend { bottom: 70px; left: 5px; max-width: 150px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- شاشة البداية -->
+    <div id="splashScreen">
+        <div id="splashLogo"><span>🛡️</span></div>
+        <div id="splashTitle">النظام الذكي</div>
+        <div id="splashSub">لمكافحة حرائق الغابات والكوارث في سوريا</div>
+        <div class="divider"></div>
+        <div id="splashFooter">تم الإنشاء <span>محمد إبراهيم</span><br>جميع الحقوق محفوظة &copy; 2024</div>
+        <div id="splashLoader"></div>
+    </div>
+
+    <header><h1>🛡️ درع الغابة v3.0 - مراقبة الحرائق في سوريا</h1></header>
+    <div class="main-layout">
+        <div id="map"></div>
+        <aside class="sidebar" id="sidebar"></aside>
+    </div>
+
+    <!-- زر الطبقات -->
+    <button class="layer-control-btn" id="layerToggleBtn">🗺️ الطبقات</button>
+    <div class="layer-panel" id="layerPanel">
+        <div class="layer-group">
+            <div class="layer-group-title">🗺️ طبقات الأساس</div>
+            <div class="layer-item"><input type="radio" name="basemap" value="osm" checked> 🗺️ OpenStreetMap</div>
+            <div class="layer-item"><input type="radio" name="basemap" value="satellite"> 🛰️ القمر الصناعي</div>
+            <div class="layer-item"><input type="radio" name="basemap" value="topo"> 🏔️ التضاريس</div>
+            <div class="layer-item"><input type="radio" name="basemap" value="dark"> 🌙 مظلم</div>
+            <div class="layer-item"><input type="radio" name="basemap" value="carto"> 🗺️ CartoDB</div>
+        </div>
+        <div class="layer-group">
+            <div class="layer-group-title">📊 طبقات إضافية</div>
+            <div class="layer-item"><input type="checkbox" id="layerSyriaBorder" checked> 🇸🇾 حدود سوريا</div>
+            <div class="layer-item"><input type="checkbox" id="layerFireStations" checked> 🚒 مراكز الإطفاء</div>
+            <div class="layer-item"><input type="checkbox" id="layerWeather"> ☁️ الطقس الحي</div>
+            <div class="layer-item"><input type="checkbox" id="layerFireRisk" checked> 🔥 خطر الحرائق</div>
+            <div class="layer-item"><input type="checkbox" id="layerReports" checked> 🚨 البلاغات</div>
+            <div class="layer-item"><input type="checkbox" id="layerLocations" checked> 📍 المواقع المحفوظة</div>
+            <div class="layer-item"><input type="checkbox" id="layerCrews" checked> 🚒 طواقم الإطفاء</div>
+            <div class="layer-item"><input type="checkbox" id="layerNASA" checked> 🛰️ NASA FIRMS</div>
+        </div>
+    </div>
+
+    <!-- وسيلة إيضاح طبقة الطقس -->
+    <div class="weather-legend" id="weatherLegend">
+        <div class="legend-title">☁️ دليل الطقس</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#FFD54F;"></div> صافٍ</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#90A4AE;"></div> غائم</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#42A5F5;"></div> أمطار محتملة</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#1976D2;"></div> أمطار قوية</div>
+    </div>
+
+    <!-- زر البلاغ العائم -->
+    <button id="floatingReportBtn" title="إرسال بلاغ حريق">🚨</button>
+
+    <!-- الشريط السفلي -->
+    <nav class="bottom-bar">
+        <button class="btn btn-danger" id="btnEmergency">🚨 حريق</button>
+        <button class="btn btn-location" id="btnLocate">📍 موقعي</button>
+        <button class="btn btn-orange" id="btnDraw">✏️ رسم</button>
+        <button class="btn btn-purple" id="btnAddLocation">➕ موقع</button>
+        <button class="btn btn-firestation" id="btnAddFireStation">🚒 مركز</button>
+        <button class="btn btn-management" id="btnFireManagement">🔥 إدارة</button>
+        <button class="btn btn-nasa" id="btnNASA">🛰️ ناسا</button>
+        <button class="btn btn-clear" id="btnClearEdits">🗑️ حذف</button>
+        <button class="btn btn-blue" id="btnResetStations">🔄 إعادة مراكز</button>
+    </nav>
+
+    <!-- مودال إدارة الحريق -->
+    <div class="modal-overlay" id="fireManagementModal">
+        <div class="modal-box">
+            <div class="modal-title">🔥 إدارة الحريق</div>
+            <div id="activeReportsList" style="max-height:180px;overflow-y:auto;margin-bottom:10px;border-bottom:1px solid #333;padding-bottom:10px;"></div>
+            <div id="fireDetailsPanel">
+                <div class="mgmt-row"><span class="label">📍 الموقع</span><span class="value" id="mgmtLocation">--</span></div>
+                <div class="mgmt-row"><span class="label">🌤️ الطقس</span><span class="value" id="mgmtWeather">--</span></div>
+                <div class="mgmt-row"><span class="label">🏔️ التضاريس (الارتفاع)</span><span class="value" id="mgmtTerrain">-- م</span></div>
+                <div class="mgmt-row"><span class="label">🚗 المسار (من أقرب مركز)</span><span class="value" id="mgmtRoute">--</span></div>
+                <div class="mgmt-row"><span class="label">⏱️ الوقت المقدر للوصول</span><span class="value" id="mgmtEta">--</span></div>
+                <button class="btn btn-blue" id="btnNavigateToFire" style="width:100%;margin:8px 0;">🗺️ نقل الخريطة إلى موقع الحريق</button>
+                <hr style="border-color:#333;margin:8px 0;">
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                    <input type="text" id="crewName" placeholder="اسم الطاقم (مثال: فوج دمشق)" style="flex:2;min-width:120px;">
+                    <input type="number" id="crewCount" placeholder="العدد" style="flex:1;min-width:60px;">
+                </div>
+                <button class="btn btn-firestation" id="btnAddCrew" style="width:100%;">🚒 إضافة طاقم إطفاء إلى الموقع</button>
+                <div id="crewListDisplay" style="margin-top:8px;font-size:0.8rem;color:#aaa;"></div>
+            </div>
+            <button class="btn" id="btnCloseManagement" style="width:100%;margin-top:10px;background:#555;">إغلاق</button>
+        </div>
+    </div>
+
+    <!-- مودال البلاغ -->
+    <div class="modal-overlay" id="emergencyModal">
+        <div class="modal-box">
+            <div class="modal-title">🚨 إبلاغ عن حريق</div>
+            <input type="text" id="fireLocation" placeholder="المنطقة" readonly>
+            <input type="text" id="fireLat" placeholder="خط العرض" readonly>
+            <input type="text" id="fireLng" placeholder="خط الطول" readonly>
+            <div id="firestationInfo">
+                <div class="info-row"><span class="label">🚒 أقرب مركز إطفاء</span><span class="value" id="nearestStationName">--</span></div>
+                <div class="info-row"><span class="label">📏 المسافة</span><span class="value" id="nearestStationDistance">-- كم</span></div>
+                <div class="info-row"><span class="label">🧭 الاتجاه</span><span class="value" id="nearestStationDirection">--</span></div>
+            </div>
+            <select id="fireType"><option value="">نوع الحريق...</option><option value="غابات">🔥 غابات</option><option value="أعشاب">🌾 أعشاب</option><option value="مباني">🏠 مباني</option><option value="مركبات">🚗 مركبات</option><option value="أخرى">⚠️ أخرى</option></select>
+            <select id="fireSeverity"><option value="">الخطورة...</option><option value="عالي">🔴 عالي</option><option value="متوسط">🟠 متوسط</option><option value="منخفض">🟢 منخفض</option></select>
+            <textarea id="fireDesc" placeholder="وصف الحريق..."></textarea>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-danger" id="btnSubmitReport" style="flex:1">إرسال</button>
+                <button class="btn btn-whatsapp" id="btnWhatsappFromReport" style="flex:1">📤 واتساب</button>
+                <button class="btn btn-info" id="btnSMSFromReport" style="flex:1;background:#2196F3;">📱 رسالة نصية</button>
+            </div>
+            <button class="btn" id="btnCloseEmergency" style="width:100%;margin-top:6px;background:#555;">إلغاء</button>
+        </div>
+    </div>
+
+    <!-- مودال إضافة موقع -->
+    <div class="modal-overlay" id="locationModal">
+        <div class="modal-box">
+            <div class="modal-title">📍 إضافة موقع</div>
+            <input type="text" id="pointName" placeholder="اسم الموقع">
+            <input type="text" id="latInput" placeholder="خط العرض">
+            <input type="text" id="lngInput" placeholder="خط الطول">
+            <button class="btn" id="btnSaveLocation" style="width:100%">حفظ</button>
+            <button class="btn" id="btnCloseLocation" style="width:100%;margin-top:6px;background:#555;">إلغاء</button>
+        </div>
+    </div>
+
+    <!-- مودال إضافة مركز إطفاء -->
+    <div class="modal-overlay" id="firestationModal">
+        <div class="modal-box">
+            <div class="modal-title">🚒 إضافة مركز إطفاء</div>
+            <input type="text" id="stationName" placeholder="اسم المركز">
+            <input type="text" id="stationLat" placeholder="خط العرض">
+            <input type="text" id="stationLng" placeholder="خط الطول">
+            <select id="stationType"><option value="رئيسي">🏢 رئيسي</option><option value="فرعي">🚒 فرعي</option><option value="متطوع">🧑‍🚒 متطوع</option></select>
+            <button class="btn btn-firestation" id="btnSaveStation" style="width:100%">حفظ المركز</button>
+            <button class="btn" id="btnCloseStation" style="width:100%;margin-top:6px;background:#555;">إلغاء</button>
+        </div>
+    </div>
+
+    <!-- مودال تعديل مركز إطفاء -->
+    <div class="modal-overlay" id="editStationModal">
+        <div class="modal-box">
+            <div class="modal-title">✏️ تعديل مركز إطفاء</div>
+            <input type="text" id="editStationId" hidden>
+            <input type="text" id="editStationName" placeholder="اسم المركز">
+            <input type="text" id="editStationLat" placeholder="خط العرض">
+            <input type="text" id="editStationLng" placeholder="خط الطول">
+            <select id="editStationType"><option value="رئيسي">🏢 رئيسي</option><option value="فرعي">🚒 فرعي</option><option value="متطوع">🧑‍🚒 متطوع</option></select>
+            <button class="btn btn-blue" id="btnSaveEditStation" style="width:100%">💾 حفظ التعديلات</button>
+            <button class="btn" id="btnCloseEditStation" style="width:100%;margin-top:6px;background:#555;">إلغاء</button>
+        </div>
+    </div>
+
+    <!-- مودال حالة NASA -->
+    <div class="modal-overlay" id="nasaStatusModal">
+        <div class="modal-box">
+            <div class="modal-title">🛰️ حالة نظام NASA FIRMS</div>
+            <div id="nasaStatusContent" style="max-height:300px;overflow-y:auto;"></div>
+            <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
+                <button class="btn btn-blue" id="btnTestNASA" style="flex:1;font-size:0.8rem;">🧪 اختبار الاتصال</button>
+                <button class="btn btn-nasa" id="btnFetchNASA" style="flex:1;font-size:0.8rem;">🔄 جلب البيانات</button>
+                <button class="btn btn-purple" id="btnSimulateNASA" style="flex:1;font-size:0.8rem;">🎮 محاكاة</button>
+            </div>
+            <button class="btn" id="btnCloseNASA" style="width:100%;margin-top:8px;background:#555;">إغلاق</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- تحميل المكتبات الخارجية عبر CDN -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
+    <!-- Firebase SDK compat (بدون وحدات) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
+
+    <script>
+        // ============================================================
+        // درع الغابة v3.0 - كود مدمج - مع طبقة الطقس الحي
+        // ============================================================
+
+        (function() {
+            'use strict';
+
+            // ---- إعدادات Firebase ----
+            var firebaseConfig = {
+                apiKey: "AIzaSyC1MTq6BVeEcKmBw_QpFvIvDHLHxvz-KnU",
+                authDomain: "forest-shield-syria-cad77.firebaseapp.com",
+                projectId: "forest-shield-syria-cad77",
+                storageBucket: "forest-shield-syria-cad77.firebasestorage.app",
+                messagingSenderId: "203491756771",
+                appId: "1:203491756771:web:9284bf6dab09d04705d3d6",
+                measurementId: "G-XF4VNQLDMP"
+            };
+
+            if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            var db = firebase.firestore ? firebase.firestore() : null;
+            var auth = firebase.auth ? firebase.auth() : null;
+            var messaging = firebase.messaging ? firebase.messaging() : null;
+
+            if (db && db.enablePersistence) {
+                db.enablePersistence().catch(function(err) {
+                    if (err.code == 'failed-precondition') console.warn('Firestore persistence: multiple tabs');
+                    else if (err.code == 'unimplemented') console.warn('Browser no persistence support');
+                });
+            }
+
+            // ---- المتغيرات العامة ----
+            var map, drawnItems, drawControl;
+            var SYRIA_CENTER = [34.8, 38.0];
+            var currentLat = SYRIA_CENTER[0], currentLng = SYRIA_CENTER[1];
+            var currentWeather = null, currentSpread = 0.5;
+            var reports = [], locations = [], fireStations = [], fireCrews = [];
+            var selectedReportCoords = null;
+            var baseLayers = {}, overlayLayers = {};
+            var currentBasemap = 'osm';
+            var syriaBorderLayer = null;
+            var fireStationMarkers = {};
+            var drawActive = false;
+            var userLocationMarker = null;
+            var userLocationAccuracy = null;
+            var locationWatchId = null;
+            var isLocating = false;
+            var nasaMarkers = [];
+            var selectedReportId = null;
+            var selectedManagementReportId = null;
+            var firebaseSyncEnabled = true;
+            var firebaseUser = null;
+            var errorLog = [];
+
+            var nasaStatus = {
+                lastCheck: null, lastSuccess: null, lastError: null,
+                totalPoints: 0, isChecking: false, sourceUsed: null, simulationMode: false
+            };
+
+            // ---- متغيرات طبقة الطقس الحي ----
+            var weatherGridCache = null;
+            var weatherGridCacheTime = 0;
+            var WEATHER_CACHE_DURATION = 10 * 60 * 1000; // 10 دقائق
+            var weatherRefreshTimer = null;
+
+            // ---- البيانات الافتراضية ----
+            var DEFAULT_FIRE_STATIONS = [
+                { id: 'st1', name: 'دمشق - فوج الإطفاء', lat: 33.5138, lng: 36.2765, type: 'رئيسي' },
+                { id: 'st2', name: 'ريف دمشق - دوما', lat: 33.5714, lng: 36.4028, type: 'رئيسي' },
+                { id: 'st3', name: 'حلب - فوج الإطفاء', lat: 36.2023, lng: 37.1345, type: 'رئيسي' },
+                { id: 'st4', name: 'حمص - فوج الإطفاء', lat: 34.7268, lng: 36.7130, type: 'رئيسي' },
+                { id: 'st5', name: 'حماة - فوج الإطفاء', lat: 35.1318, lng: 36.7578, type: 'رئيسي' },
+                { id: 'st6', name: 'اللاذقية - فوج الإطفاء', lat: 35.5198, lng: 35.7797, type: 'رئيسي' },
+                { id: 'st7', name: 'طرطوس - فوج الإطفاء', lat: 34.8897, lng: 35.8866, type: 'رئيسي' },
+                { id: 'st8', name: 'دير الزور - فوج الإطفاء', lat: 35.3354, lng: 40.1408, type: 'رئيسي' },
+                { id: 'st9', name: 'الحسكة - فوج الإطفاء', lat: 36.5050, lng: 40.7450, type: 'رئيسي' },
+                { id: 'st10', name: 'الرقة - فوج الإطفاء', lat: 35.9526, lng: 39.0185, type: 'رئيسي' },
+                { id: 'st11', name: 'إدلب - فوج الإطفاء', lat: 35.9330, lng: 36.6300, type: 'رئيسي' },
+                { id: 'st12', name: 'درعا - فوج الإطفاء', lat: 32.6187, lng: 36.1020, type: 'رئيسي' },
+                { id: 'st13', name: 'السويداء - فوج الإطفاء', lat: 32.7069, lng: 36.5663, type: 'رئيسي' },
+                { id: 'st14', name: 'القنيطرة - فوج الإطفاء', lat: 33.1250, lng: 35.8230, type: 'رئيسي' }
+            ];
+
+            var NASA_SOURCES = [
+                { id: 'VIIRS_SNPP_NRT', name: 'Suomi NPP', priority: 3 },
+                { id: 'VIIRS_NOAA20_NRT', name: 'NOAA-20', priority: 2 },
+                { id: 'VIIRS_NOAA21_NRT', name: 'NOAA-21', priority: 1 },
+                { id: 'MODIS_NRT', name: 'MODIS Terra/Aqua', priority: 4 }
+            ];
+            var NASA_MAP_KEY = '935ad423ed126ad284f9a95a076ae222';
+            var NASA_AREA = '35,32,42,38';
+            var NASA_DAY_RANGE = 2;
+
+            // ===== أدوات مساعدة =====
+            function toRad(deg) { return deg * Math.PI / 180; }
+            function toDeg(rad) { return rad * 180 / Math.PI; }
+
+            function haversineDistance(lat1, lng1, lat2, lng2) {
+                var R = 6371;
+                var dLat = toRad(lat2 - lat1);
+                var dLng = toRad(lng2 - lng1);
+                var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+                var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                return R * c;
+            }
+
+            function getBearing(lat1, lng1, lat2, lng2) {
+                var dLng = toRad(lng2 - lng1);
+                var y = Math.sin(dLng) * Math.cos(toRad(lat2));
+                var x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+                    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
+                var brng = Math.atan2(y, x);
+                return (toDeg(brng) + 360) % 360;
+            }
+
+            function getDirectionText(deg) {
+                var dirs = ['شمال', 'شمال شرقي', 'شرق', 'جنوب شرقي', 'جنوب', 'جنوب غربي', 'غرب', 'شمال غربي'];
+                return dirs[Math.round(deg / 45) % 8];
+            }
+
+            function getWindDir(deg) {
+                var dirs = ['شمال', 'شمال شرقي', 'شرق', 'جنوب شرقي', 'جنوب', 'جنوب غربي', 'غرب', 'شمال غربي'];
+                return dirs[Math.round(deg / 45) % 8];
+            }
+
+            function findNearestStation(lat, lng) {
+                if (!fireStations || fireStations.length === 0) return null;
+                var nearest = null, minDist = Infinity;
+                for (var i = 0; i < fireStations.length; i++) {
+                    var s = fireStations[i];
+                    var dist = haversineDistance(lat, lng, s.lat, s.lng);
+                    if (dist < minDist) { minDist = dist; nearest = s; }
+                }
+                if (nearest) {
+                    var bearing = getBearing(lat, lng, nearest.lat, nearest.lng);
+                    return { station: nearest, distance: minDist, bearing: bearing, direction: getDirectionText(bearing) };
+                }
+                return null;
+            }
+
+            function updateNearestStationInfo(lat, lng) {
+                var infoDiv = document.getElementById('firestationInfo');
+                var nameEl = document.getElementById('nearestStationName');
+                var distEl = document.getElementById('nearestStationDistance');
+                var dirEl = document.getElementById('nearestStationDirection');
+                var result = findNearestStation(lat, lng);
+                if (result) {
+                    infoDiv.style.display = 'block';
+                    nameEl.textContent = result.station.name;
+                    distEl.textContent = result.distance.toFixed(2) + ' كم';
+                    dirEl.textContent = result.direction;
+                } else {
+                    infoDiv.style.display = 'none';
+                }
+            }
+
+            // ===== جلب الطقس الحالي =====
+            function fetchWeather(lat, lng) {
+                if (!lat || !lng) { lat = currentLat; lng = currentLng; }
+                var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lng +
+                    '&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m';
+                fetch(url)
+                    .then(function(res) { return res.json(); })
+                    .then(function(data) {
+                        currentWeather = {
+                            temp: data.current.temperature_2m,
+                            humidity: data.current.relative_humidity_2m,
+                            windSpeed: data.current.wind_speed_10m,
+                            windDir: data.current.wind_direction_10m,
+                            lat: lat, lng: lng
+                        };
+                        currentSpread = (currentWeather.windSpeed * 0.5) + (currentWeather.temp * 0.1) - (currentWeather.humidity * 0.05);
+                        currentSpread = Math.max(0.5, Math.min(30, currentSpread));
+                        updateWeatherUI();
+                    })
+                    .catch(function(e) {
+                        console.warn('فشل جلب الطقس، استخدم بيانات افتراضية', e);
+                        currentWeather = { temp: 35, humidity: 30, windSpeed: 15, windDir: 180, lat: lat, lng: lng };
+                        currentSpread = 8.5;
+                        updateWeatherUI();
+                    });
+            }
+
+            function updateWeatherUI() {
+                if (!currentWeather) return;
+                var el = document.getElementById('tempVal');
+                if (el) el.textContent = currentWeather.temp.toFixed(1) + '°C';
+                el = document.getElementById('windSpd');
+                if (el) el.textContent = currentWeather.windSpeed.toFixed(1) + ' km/h';
+                el = document.getElementById('humVal');
+                if (el) el.textContent = currentWeather.humidity.toFixed(0) + '%';
+                el = document.getElementById('windDir');
+                if (el) el.textContent = getWindDir(currentWeather.windDir);
+                el = document.getElementById('spreadSpeed');
+                if (el) el.textContent = currentSpread.toFixed(1);
+                el = document.getElementById('spreadInfo');
+                if (el) {
+                    el.textContent = currentSpread > 15 ? '🔴 قصوى' : currentSpread > 10 ? '🟠 عالية' : currentSpread > 5 ? '🟡 متوسطة' : '🟢 منخفضة';
+                }
+                el = document.getElementById('windArrow');
+                if (el) el.style.transform = 'translate(-50%,-100%) rotate(' + currentWeather.windDir + 'deg)';
+                el = document.getElementById('lastUpdate');
+                if (el) el.textContent = 'آخر تحديث: ' + new Date().toLocaleTimeString('ar-SY');
+            }
+
+            // ============================================================
+            // ===== طبقة الطقس الحي (الغيوم + الأمطار + حالة الطقس) =====
+            // ============================================================
+
+            function getWeatherDescription(code) {
+                var codes = {
+                    0:  { text: 'صافٍ تماماً',        icon: '☀️',  color: '#FFC107' },
+                    1:  { text: 'صافٍ غالباً',        icon: '🌤️',  color: '#FFD54F' },
+                    2:  { text: 'غائم جزئياً',        icon: '⛅',  color: '#B0BEC5' },
+                    3:  { text: 'غائم',               icon: '☁️',  color: '#607D8B' },
+                    45: { text: 'ضباب',               icon: '🌫️',  color: '#9E9E9E' },
+                    48: { text: 'ضباب متجمد',         icon: '🌫️',  color: '#9E9E9E' },
+                    51: { text: 'رذاذ خفيف',          icon: '🌦️',  color: '#4FC3F7' },
+                    53: { text: 'رذاذ متوسط',         icon: '🌦️',  color: '#29B6F6' },
+                    55: { text: 'رذاذ كثيف',          icon: '🌧️',  color: '#0288D1' },
+                    56: { text: 'رذاذ متجمد خفيف',    icon: '🌧️',  color: '#0288D1' },
+                    57: { text: 'رذاذ متجمد كثيف',    icon: '🌧️',  color: '#01579B' },
+                    61: { text: 'مطر خفيف',           icon: '🌧️',  color: '#039BE5' },
+                    63: { text: 'مطر متوسط',          icon: '🌧️',  color: '#0277BD' },
+                    65: { text: 'مطر غزير',           icon: '🌧️',  color: '#01579B' },
+                    66: { text: 'مطر متجمد خفيف',     icon: '🌧️',  color: '#0277BD' },
+                    67: { text: 'مطر متجمد غزير',     icon: '🌧️',  color: '#01579B' },
+                    71: { text: 'ثلج خفيف',           icon: '🌨️',  color: '#E1F5FE' },
+                    73: { text: 'ثلج متوسط',          icon: '🌨️',  color: '#B3E5FC' },
+                    75: { text: 'ثلج غزير',           icon: '❄️',  color: '#81D4FA' },
+                    77: { text: 'حبيبات ثلج',         icon: '🌨️',  color: '#B3E5FC' },
+                    80: { text: 'زخات مطر خفيفة',     icon: '🌦️',  color: '#4FC3F7' },
+                    81: { text: 'زخات مطر متوسطة',    icon: '🌧️',  color: '#0288D1' },
+                    82: { text: 'زخات مطر عنيفة',     icon: '⛈️',  color: '#01579B' },
+                    85: { text: 'زخات ثلج خفيفة',     icon: '🌨️',  color: '#B3E5FC' },
+                    86: { text: 'زخات ثلج غزيرة',     icon: '❄️',  color: '#81D4FA' },
+                    95: { text: 'عاصفة رعدية',        icon: '⛈️',  color: '#4A148C' },
+                    96: { text: 'عاصفة رعدية مع برد', icon: '⛈️',  color: '#311B92' },
+                    99: { text: 'عاصفة رعدية عنيفة',  icon: '⛈️',  color: '#1A237E' }
+                };
+                return codes[code] || { text: 'غير معروف', icon: '❓', color: '#555' };
+            }
+
+            function renderWeatherGrid(data, group) {
+                if (!data || data.length === 0) return;
+
+                data.forEach(function(w) {
+                    var info = getWeatherDescription(w.weatherCode);
+                    var icon = L.divIcon({
+                        html: '<div style="background:' + info.color +
+                              ';width:34px;height:34px;border-radius:50%;border:2px solid #fff;' +
+                              'box-shadow:0 0 12px rgba(0,0,0,0.5);display:flex;align-items:center;' +
+                              'justify-content:center;font-size:17px;line-height:1;">' + info.icon + '</div>',
+                        iconSize: [34, 34],
+                        iconAnchor: [17, 17],
+                        className: 'weather-marker'
+                    });
+
+                    var circleOpacity = 0.10 + (w.cloudCover / 180);
+                    var circleColor = w.rainProb > 60 ? '#1976D2' :
+                                     w.rainProb > 30 ? '#42A5F5' :
+                                     w.cloudCover > 50 ? '#90A4AE' : '#FFD54F';
+                    L.circle([w.lat, w.lng], {
+                        radius: 55000,
+                        color: circleColor,
+                        fillColor: circleColor,
+                        fillOpacity: circleOpacity,
+                        weight: 1,
+                        opacity: 0.4
+                    }).addTo(group);
+
+                    var rainColor = w.rainProb > 60 ? '#2196F3' : w.rainProb > 30 ? '#4FC3F7' : '#888';
+                    var popup = '<div style="min-width:220px;direction:rtl;text-align:right;font-family:Segoe UI,Tahoma;">';
+                    popup += '<div style="text-align:center;font-size:1.1rem;font-weight:bold;color:' + info.color + ';margin-bottom:6px;">' +
+                             info.icon + ' ' + info.text + '</div>';
+                    popup += '<hr style="border-color:#444;margin:6px 0;">';
+                    popup += '<div style="font-size:0.85rem;line-height:1.7;">';
+                    popup += '🌡️ الحرارة: <b>' + w.temp.toFixed(1) + '°C</b><br>';
+                    popup += '🤔 المحسوسة: <b>' + (w.apparent || w.temp).toFixed(1) + '°C</b><br>';
+                    popup += '💧 الرطوبة: <b>' + w.humidity + '%</b><br>';
+                    popup += '☁️ الغيوم: <b style="color:#90A4AE;">' + w.cloudCover + '%</b><br>';
+                    popup += '🌧️ احتمال المطر: <b style="color:' + rainColor + ';">' + w.rainProb + '%</b><br>';
+                    popup += '💦 الأمطار الحالية: <b>' + w.precipitation.toFixed(2) + ' mm</b><br>';
+                    popup += '💨 الرياح: <b>' + w.windSpeed.toFixed(1) + ' كم/س</b> (' + getWindDir(w.windDir) + ')<br>';
+                    popup += '</div>';
+                    popup += '<div style="margin-top:6px;font-size:0.7rem;color:#888;text-align:center;">' +
+                             '📍 ' + w.lat.toFixed(2) + ', ' + w.lng.toFixed(2) + '</div>';
+                    popup += '</div>';
+
+                    L.marker([w.lat, w.lng], { icon: icon })
+                        .bindPopup(popup)
+                        .addTo(group);
+                });
+            }
+
+            function fetchWeatherGrid() {
+                var group = overlayLayers.weather;
+                if (!group) return;
+
+                var gridPoints = [];
+                for (var lat = 32.5; lat <= 37.5; lat += 1.0) {
+                    for (var lng = 35.5; lng <= 42.5; lng += 1.0) {
+                        gridPoints.push({ lat: parseFloat(lat.toFixed(2)), lng: parseFloat(lng.toFixed(2)) });
+                    }
+                }
+                fireStations.forEach(function(s) {
+                    var dup = gridPoints.some(function(p) {
+                        return haversineDistance(p.lat, p.lng, s.lat, s.lng) < 0.6;
+                    });
+                    if (!dup) gridPoints.push({ lat: s.lat, lng: s.lng });
+                });
+
+                var lats = gridPoints.map(function(p) { return p.lat; }).join(',');
+                var lngs = gridPoints.map(function(p) { return p.lng; }).join(',');
+
+                var url = 'https://api.open-meteo.com/v1/forecast' +
+                          '?latitude=' + lats +
+                          '&longitude=' + lngs +
+                          '&current=temperature_2m,apparent_temperature,relative_humidity_2m,' +
+                          'precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m' +
+                          '&hourly=precipitation_probability&forecast_days=1&timezone=auto';
+
+                showToast('☁️ جاري تحميل بيانات الطقس الحي...');
+
+                fetch(url)
+                    .then(function(res) {
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        return res.json();
+                    })
+                    .then(function(data) {
+                        var results = Array.isArray(data) ? data : [data];
+                        var weatherData = [];
+                        var nowHour = new Date().getHours();
+
+                        results.forEach(function(item, idx) {
+                            if (!item.current) return;
+                            var point = gridPoints[idx];
+                            if (!point) return;
+
+                            var rainProb = 0;
+                            if (item.hourly && item.hourly.precipitation_probability &&
+                                item.hourly.precipitation_probability.length > 0) {
+                                var startIdx = Math.max(0, nowHour - 1);
+                                var endIdx = Math.min(item.hourly.precipitation_probability.length, nowHour + 3);
+                                for (var i = startIdx; i < endIdx; i++) {
+                                    var p = item.hourly.precipitation_probability[i] || 0;
+                                    if (p > rainProb) rainProb = p;
+                                }
+                            }
+
+                            weatherData.push({
+                                lat: point.lat,
+                                lng: point.lng,
+                                temp: item.current.temperature_2m,
+                                apparent: item.current.apparent_temperature,
+                                humidity: item.current.relative_humidity_2m,
+                                precipitation: item.current.precipitation || 0,
+                                weatherCode: item.current.weather_code,
+                                cloudCover: item.current.cloud_cover || 0,
+                                windSpeed: item.current.wind_speed_10m,
+                                windDir: item.current.wind_direction_10m,
+                                rainProb: rainProb
+                            });
+                        });
+
+                        weatherGridCache = weatherData;
+                        weatherGridCacheTime = Date.now();
+
+                        group.clearLayers();
+                        renderWeatherGrid(weatherData, group);
+
+                        var rainyCount = weatherData.filter(function(w) { return w.rainProb > 30; }).length;
+                        var cloudyCount = weatherData.filter(function(w) { return w.cloudCover > 50; }).length;
+                        showToast('☁️ تم تحميل ' + weatherData.length + ' نقطة (' +
+                                 cloudyCount + ' غائمة، ' + rainyCount + ' أمطار محتملة)');
+
+                        logError('info', 'طبقة الطقس الحي', weatherData.length + ' نقطة');
+                    })
+                    .catch(function(e) {
+                        console.error('Weather grid error:', e);
+                        showToast('⚠️ فشل تحميل بيانات الطقس الحي');
+                        logError('error', 'فشل تحميل شبكة الطقس', e.message);
+                    });
+            }
+
+            function scheduleWeatherRefresh() {
+                if (weatherRefreshTimer) clearInterval(weatherRefreshTimer);
+                weatherRefreshTimer = setInterval(function() {
+                    if (document.getElementById('layerWeather') &&
+                        document.getElementById('layerWeather').checked) {
+                        fetchWeatherGrid();
+                    }
+                }, WEATHER_CACHE_DURATION);
+            }
+
+            function updateWeatherLayer() {
+                var group = overlayLayers.weather;
+                if (!group) return;
+                group.clearLayers();
+
+                if (!document.getElementById('layerWeather').checked) {
+                    document.getElementById('weatherLegend').classList.remove('active');
+                    return;
+                }
+
+                // إظهار وسيلة الإيضاح
+                document.getElementById('weatherLegend').classList.add('active');
+
+                // استخدام الذاكرة المؤقتة إذا كانت حديثة
+                if (weatherGridCache && (Date.now() - weatherGridCacheTime) < WEATHER_CACHE_DURATION) {
+                    renderWeatherGrid(weatherGridCache, group);
+                    return;
+                }
+
+                // جلب بيانات جديدة
+                fetchWeatherGrid();
+            }
+
+            // ============================================================
+            // ===== Firebase دوال المزامنة =====
+            // ============================================================
+            function syncReportToFirebase(report) {
+                if (!db || !firebaseSyncEnabled) return;
+                try {
+                    var ref = db.collection('reports').doc(report.id.toString());
+                    ref.set(Object.assign({}, report, { syncedAt: new Date().toISOString() }));
+                } catch (e) { console.error('Sync report error:', e); }
+            }
+
+            function syncLocationToFirebase(loc) {
+                if (!db || !firebaseSyncEnabled) return;
+                try {
+                    db.collection('locations').add(Object.assign({}, loc, { syncedAt: new Date().toISOString() }));
+                } catch (e) { console.error('Location sync error:', e); }
+            }
+
+            function syncFireStationToFirebase(station) {
+                if (!db || !firebaseSyncEnabled) return;
+                try {
+                    db.collection('fireStations').doc(station.id).set(Object.assign({}, station, { syncedAt: new Date().toISOString() }));
+                } catch (e) { console.error('Station sync error:', e); }
+            }
+
+            function deleteFireStationFromFirebase(stationId) {
+                if (!db || !firebaseSyncEnabled) return;
+                try {
+                    db.collection('fireStations').doc(stationId).delete();
+                } catch (e) { console.error('Delete station sync error:', e); }
+            }
+
+            function syncCrewToFirebase(crew) {
+                if (!db || !firebaseSyncEnabled) return;
+                try {
+                    db.collection('fireCrews').add(Object.assign({}, crew, { syncedAt: new Date().toISOString() }));
+                } catch (e) { console.error('Crew sync error:', e); }
+            }
+
+            // ===== التخزين المحلي =====
+            function loadData() {
+                try {
+                    reports = JSON.parse(localStorage.getItem('forestShield_reports')) || [];
+                    locations = JSON.parse(localStorage.getItem('forestShield_locations')) || [];
+                    fireCrews = JSON.parse(localStorage.getItem('forestShield_crews')) || [];
+                    var storedStations = JSON.parse(localStorage.getItem('forestShield_firestations'));
+                    if (storedStations && storedStations.length > 0) {
+                        fireStations = storedStations;
+                    } else {
+                        fireStations = JSON.parse(JSON.stringify(DEFAULT_FIRE_STATIONS));
+                        localStorage.setItem('forestShield_firestations', JSON.stringify(fireStations));
+                    }
+                    errorLog = JSON.parse(localStorage.getItem('forestShield_errorLog')) || [];
+                    var savedStatus = JSON.parse(localStorage.getItem('forestShield_nasaStatus'));
+                    if (savedStatus) nasaStatus = savedStatus;
+                } catch (e) {
+                    reports = []; locations = []; fireCrews = [];
+                    fireStations = JSON.parse(JSON.stringify(DEFAULT_FIRE_STATIONS));
+                }
+            }
+
+            function saveReports() { localStorage.setItem('forestShield_reports', JSON.stringify(reports)); }
+            function saveLocations() { localStorage.setItem('forestShield_locations', JSON.stringify(locations)); }
+            function saveFireStations() { localStorage.setItem('forestShield_firestations', JSON.stringify(fireStations)); }
+            function saveFireCrews() { localStorage.setItem('forestShield_crews', JSON.stringify(fireCrews)); }
+            function saveNASAStatus() { localStorage.setItem('forestShield_nasaStatus', JSON.stringify(nasaStatus)); }
+
+            function getSettings() {
+                try { return JSON.parse(localStorage.getItem('forestShield_settings')) || {}; } catch (e) { return {}; }
+            }
+            function setSetting(key, val) {
+                var s = getSettings(); s[key] = val;
+                localStorage.setItem('forestShield_settings', JSON.stringify(s));
+            }
+            function getSetting(key, def) {
+                var s = getSettings();
+                return s[key] !== undefined ? s[key] : def;
+            }
+
+            function isDefaultStation(id) {
+                return DEFAULT_FIRE_STATIONS.some(function(s) { return s.id === id; });
+            }
+
+            function resetToDefaultStations() {
+                if (!confirm('⚠️ سيتم استعادة مراكز الإطفاء الافتراضية وحذف جميع المراكز المضافة. هل أنت متأكد؟')) return;
+                fireStations = JSON.parse(JSON.stringify(DEFAULT_FIRE_STATIONS));
+                saveFireStations();
+                loadFireStations();
+                renderDashboard();
+                showToast('🔄 تم استعادة المراكز الافتراضية');
+            }
+
+            // ===== سجل الأخطاء =====
+            function logError(level, message, details) {
+                var entry = {
+                    time: new Date().toLocaleTimeString('ar-SY'),
+                    level: level, message: message, details: details || ''
+                };
+                errorLog.unshift(entry);
+                if (errorLog.length > 50) errorLog.pop();
+                localStorage.setItem('forestShield_errorLog', JSON.stringify(errorLog));
+                updateErrorLogDisplay();
+            }
+
+            function updateErrorLogDisplay() {
+                var container = document.getElementById('errorLogContainer');
+                if (!container) return;
+                var html = '';
+                errorLog.slice(0, 20).forEach(function(entry) {
+                    var colorClass = entry.level === 'error' ? 'error' : entry.level === 'warn' ? 'warn' : 'info';
+                    html += '<div class="log-entry ' + colorClass + '"><span class="log-time">[' + entry.time + ']</span> ' +
+                        entry.message + (entry.details ? ' - ' + entry.details : '') + '</div>';
+                });
+                container.innerHTML = html || '<div style="color:#666;text-align:center;">لا توجد أخطاء مسجلة</div>';
+            }
+
+            // ===== NASA FIRMS =====
+            function fetchNASASource(sourceId, dayRange) {
+                var url = 'https://firms.modaps.eosdis.nasa.gov/api/area/csv/' + NASA_MAP_KEY + '/' + sourceId + '/' +
+                    NASA_AREA + '/' + dayRange;
+                return new Promise(function(resolve, reject) {
+                    var controller = new AbortController();
+                    var timeoutId = setTimeout(function() { controller.abort(); }, 15000);
+                    fetch(url, { signal: controller.signal })
+                        .then(function(response) {
+                            clearTimeout(timeoutId);
+                            if (!response.ok) throw new Error('HTTP ' + response.status);
+                            return response.text();
+                        })
+                        .then(function(text) {
+                            if (!text.trim().startsWith('latitude')) throw new Error('Invalid CSV format');
+                            var lines = text.trim().split('\n');
+                            var points = [];
+                            for (var i = 1; i < lines.length; i++) {
+                                var cols = lines[i].split(',');
+                                if (cols.length < 10) continue;
+                                var lat = parseFloat(cols[0]);
+                                var lng = parseFloat(cols[1]);
+                                var confidence = parseFloat(cols[9] || 0);
+                                var frp = parseFloat(cols[12] || 0);
+                                var date = cols[5] || '';
+                                var time = cols[6] || '';
+                                if (isNaN(lat) || isNaN(lng) || isNaN(confidence)) continue;
+                                if (confidence < 30) continue;
+                                points.push({
+                                    lat: lat, lng: lng, confidence: confidence, frp: frp,
+                                    date: date, time: time, source: sourceId,
+                                    sourceName: NASA_SOURCES.find(function(s) { return s.id === sourceId; }).name
+                                });
+                            }
+                            resolve({ success: true, points: points, count: points.length });
+                        })
+                        .catch(function(e) {
+                            logError('warn', 'NASA FIRMS فشل: ' + sourceId, e.message);
+                            resolve({ success: false, error: e.message });
+                        });
+                });
+            }
+
+            function fetchAllNASASources() {
+                if (nasaStatus.isChecking) { showToast('⏳ جاري الفحص بالفعل...'); return; }
+                nasaStatus.isChecking = true;
+                nasaStatus.lastCheck = new Date().toISOString();
+                updateNASAStatusUI();
+                showToast('🛰️ جاري جلب البيانات من جميع مصادر NASA...');
+                var allPoints = [], successCount = 0, errors = [];
+                var promises = NASA_SOURCES.map(function(source) {
+                    return fetchNASASource(source.id, NASA_DAY_RANGE).then(function(result) {
+                        if (result.success) {
+                            allPoints = allPoints.concat(result.points);
+                            successCount++;
+                            logError('info', 'NASA ' + source.name, result.count + ' نقطة');
+                        } else {
+                            errors.push(source.name + ': ' + result.error);
+                        }
+                    });
+                });
+                Promise.all(promises).then(function() {
+                    nasaStatus.isChecking = false;
+                    if (allPoints.length === 0) {
+                        nasaStatus.lastError = new Date().toISOString();
+                        logError('error', 'جميع مصادر NASA فشلت', errors.join('; '));
+                        showToast('❌ لا توجد بيانات حرائق من NASA حالياً');
+                        updateNASAStatusUI();
+                        saveNASAStatus();
+                        return;
+                    }
+                    nasaStatus.lastSuccess = new Date().toISOString();
+                    nasaStatus.totalPoints = allPoints.length;
+                    nasaStatus.sourceUsed = 'جميع المصادر (' + successCount + '/' + NASA_SOURCES.length + ')';
+                    var uniquePoints = [];
+                    allPoints.forEach(function(point) {
+                        var exists = uniquePoints.some(function(p) {
+                            return haversineDistance(p.lat, p.lng, point.lat, point.lng) < 0.5;
+                        });
+                        if (!exists) uniquePoints.push(point);
+                    });
+                    var newReports = [];
+                    uniquePoints.forEach(function(point) {
+                        var exists = reports.some(function(r) {
+                            return r.source === 'NASA_FIRMS' &&
+                                haversineDistance(r.lat, r.lng, point.lat, point.lng) < 0.5 &&
+                                (Date.now() - r.id) < 86400000;
+                        });
+                        if (!exists) {
+                            var nearest = findNearestStation(point.lat, point.lng);
+                            var report = {
+                                id: Date.now() + Math.floor(Math.random() * 1000),
+                                location: 'حريق مكتشف عبر الأقمار (' + point.sourceName + ')',
+                                lat: point.lat, lng: point.lng,
+                                type: 'غابات',
+                                severity: point.confidence > 70 ? 'عالي' : 'متوسط',
+                                description: 'تم رصده تلقائياً. الثقة: ' + point.confidence + '%, FRP: ' + point.frp +
+                                    ' MW, التاريخ: ' + point.date + ' ' + point.time,
+                                status: 'جديد', source: 'NASA_FIRMS',
+                                nasaSource: point.sourceName,
+                                confidence: point.confidence, frp: point.frp,
+                                spread: currentSpread ? currentSpread.toFixed(1) : '0.0',
+                                nearestStation: nearest ? { name: nearest.station.name,
+                                    distance: nearest.distance.toFixed(2), direction: nearest.direction } : null,
+                                createdAt: new Date().toLocaleString('ar-SY'),
+                                nasaTimestamp: new Date().toISOString()
+                            };
+                            newReports.push(report);
+                        }
+                    });
+                    if (newReports.length > 0) {
+                        newReports.forEach(function(report) {
+                            showLocalNotification(
+                                '🚨 تنبيه حريق - درع الغابة',
+                                'تم اكتشاف حريق جديد في ' + report.location + ' (ثقة: ' + report.confidence + '%)',
+                                { lat: report.lat, lng: report.lng, tag: 'nasa-fire-' + report.id }
+                            );
+                        });
+                        reports = newReports.concat(reports);
+                        saveReports();
+                        updateReportMarkers();
+                        updateNASAMarkers();
+                        renderMiniReports();
+                        newReports.forEach(function(r) { syncReportToFirebase(r); });
+                        showToast('🛰️ تم استلام ' + newReports.length + ' بلاغ جديد من NASA (' + uniquePoints.length + ' نقطة فريدة)');
+                        logError('info', 'NASA نجاح', newReports.length + ' بلاغات جديدة من ' + allPoints.length + ' نقطة');
+                    } else {
+                        showToast('✅ لا توجد حرائق جديدة (' + uniquePoints.length + ' نقطة فريدة)');
+                        logError('info', 'NASA', 'لا توجد حرائق جديدة - ' + uniquePoints.length + ' نقطة فريدة');
+                    }
+                    var cacheData = {
+                        timestamp: new Date().toISOString(),
+                        points: uniquePoints, reports: newReports
+                    };
+                    localStorage.setItem('forestShield_nasaCache', JSON.stringify(cacheData));
+                    updateNASAStatusUI();
+                    saveNASAStatus();
+                });
+            }
+
+            function simulateNASAFire() {
+                var syriaPoints = [
+                    { lat: 33.51, lng: 36.28, name: 'دمشق - جبل قاسيون' },
+                    { lat: 36.20, lng: 37.13, name: 'حلب - الغاب' },
+                    { lat: 34.73, lng: 36.71, name: 'حمص - تدمر' },
+                    { lat: 35.52, lng: 35.78, name: 'اللاذقية - الساحل' },
+                    { lat: 35.13, lng: 36.76, name: 'حماة - السلمية' },
+                    { lat: 32.62, lng: 36.10, name: 'درعا - اللجاة' },
+                    { lat: 35.34, lng: 40.14, name: 'دير الزور - البوكمال' }
+                ];
+                var point = syriaPoints[Math.floor(Math.random() * syriaPoints.length)];
+                var confidence = 60 + Math.floor(Math.random() * 40);
+                var nearest = findNearestStation(point.lat, point.lng);
+                var report = {
+                    id: Date.now(),
+                    location: point.name + ' (محاكاة)',
+                    lat: point.lat + (Math.random() - 0.5) * 0.1,
+                    lng: point.lng + (Math.random() - 0.5) * 0.1,
+                    type: 'غابات',
+                    severity: confidence > 70 ? 'عالي' : 'متوسط',
+                    description: '🔴 بلاغ محاكاة للاختبار. الثقة: ' + confidence + '%',
+                    status: 'جديد', source: 'NASA_FIRMS', nasaSource: 'محاكاة',
+                    confidence: confidence, frp: (Math.random() * 50 + 10).toFixed(1),
+                    spread: currentSpread ? currentSpread.toFixed(1) : '8.5',
+                    nearestStation: nearest ? { name: nearest.station.name, distance: nearest.distance.toFixed(2),
+                        direction: nearest.direction } : null,
+                    createdAt: new Date().toLocaleString('ar-SY'),
+                    nasaTimestamp: new Date().toISOString(),
+                    isSimulation: true
+                };
+                reports.unshift(report);
+                saveReports();
+                updateReportMarkers();
+                updateNASAMarkers();
+                renderMiniReports();
+                syncReportToFirebase(report);
+                showLocalNotification(
+                    '🧪 محاكاة - تنبيه حريق',
+                    'حريق محاكى في ' + point.name + ' (ثقة: ' + confidence + '%)',
+                    { lat: report.lat, lng: report.lng, tag: 'sim-fire-' + report.id }
+                );
+                showToast('🧪 تم إنشاء بلاغ محاكاة: ' + point.name);
+                logError('info', 'محاكاة NASA', 'بلاغ محاكى في ' + point.name);
+            }
+
+            function testNASAConnection() {
+                showToast('🧪 جاري اختبار الاتصال بـ NASA...');
+                var results = [];
+                var promises = NASA_SOURCES.map(function(source) {
+                    var url = 'https://firms.modaps.eosdis.nasa.gov/api/area/csv/' + NASA_MAP_KEY + '/' + source.id +
+                        '/' + NASA_AREA + '/1';
+                    return fetch(url, { signal: AbortSignal.timeout(10000) })
+                        .then(function(response) {
+                            if (!response.ok) throw new Error('HTTP ' + response.status);
+                            return response.text();
+                        })
+                        .then(function(text) {
+                            var lines = text.trim().split('\n');
+                            var count = Math.max(0, lines.length - 1);
+                            results.push({ name: source.name, status: '✅', count: count });
+                        })
+                        .catch(function(e) {
+                            results.push({ name: source.name, status: '❌', error: e.message });
+                        });
+                });
+                Promise.all(promises).then(function() {
+                    var html = '<div style="font-size:0.85rem;">';
+                    results.forEach(function(r) {
+                        html += '<div style="padding:4px 0;border-bottom:1px solid #333;">';
+                        html += '<b>' + r.status + ' ' + r.name + '</b>';
+                        if (r.count !== undefined) html += ' - ' + r.count + ' نقطة';
+                        if (r.error) html += ' - ' + r.error;
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                    document.getElementById('nasaStatusContent').innerHTML = html;
+                    showToast('✅ اكتمل اختبار الاتصال');
+                });
+            }
+
+            function updateNASAStatusUI() {
+                var statusEl = document.getElementById('nasaStatusBar');
+                if (!statusEl) return;
+                var lastCheckText = nasaStatus.lastCheck ? new Date(nasaStatus.lastCheck).toLocaleTimeString('ar-SY') : 'لم يتم الفحص';
+                var lastSuccessText = nasaStatus.lastSuccess ? new Date(nasaStatus.lastSuccess).toLocaleTimeString('ar-SY') : '--';
+                var statusColor = nasaStatus.isChecking ? 'warn' : nasaStatus.lastSuccess ? 'ok' : nasaStatus.lastError ? 'error' : '';
+                var statusText = nasaStatus.isChecking ? '⏳ جاري الفحص...' : nasaStatus.lastSuccess ? '✅ يعمل' : nasaStatus.lastError ? '❌ خطأ' : '⚪ غير مفحوص';
+                statusEl.innerHTML =
+                    '<div class="status-title">🛰️ حالة NASA FIRMS</div>' +
+                    '<div class="status-row"><span class="status-label">الحالة</span><span class="status-value ' + statusColor + '">' + statusText + '</span></div>' +
+                    '<div class="status-row"><span class="status-label">آخر فحص</span><span class="status-value">' + lastCheckText + '</span></div>' +
+                    '<div class="status-row"><span class="status-label">آخر نجاح</span><span class="status-value">' + lastSuccessText + '</span></div>' +
+                    '<div class="status-row"><span class="status-label">النقاط الأخيرة</span><span class="status-value">' + nasaStatus.totalPoints + '</span></div>' +
+                    '<div class="status-row"><span class="status-label">المصدر</span><span class="status-value">' + (nasaStatus.sourceUsed || '--') + '</span></div>' +
+                    '<div class="nasa-actions">' +
+                    '<button class="btn-test" onclick="window.testNASAConnection()">🧪 اختبار</button>' +
+                    '<button class="btn-refresh" onclick="window.fetchAllNASASources()">🔄 جلب</button>' +
+                    '<button class="btn-sim" onclick="window.simulateNASAFire()">🎮 محاكاة</button>' +
+                    '</div>';
+            }
+
+            function updateNASAMarkers() {
+                var group = overlayLayers.nasa;
+                if (!group) return;
+                group.clearLayers();
+                if (!document.getElementById('layerNASA').checked) return;
+                var nasaReports = reports.filter(function(r) { return r.source === 'NASA_FIRMS'; });
+                nasaReports.forEach(function(r) {
+                    var color = r.confidence > 70 ? '#d32f2f' : r.confidence > 50 ? '#FF9800' : '#FFC107';
+                    var icon = L.divIcon({
+                        html: '<div style="background:' + color + ';width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 15px ' + color + ';animation:pulse 1.5s infinite;"></div>',
+                        iconSize: [14, 14],
+                        className: 'nasa-fire-marker'
+                    });
+                    var marker = L.marker([r.lat, r.lng], { icon: icon }).addTo(group);
+                    var popup = '<div style="min-width:200px;">' +
+                        '<b style="color:#f44336;">🛰️ حريق مكتشف (NASA)</b><br>' +
+                        '📍 ' + r.location + '<br>' +
+                        '🔥 الثقة: ' + r.confidence + '%<br>' +
+                        '⚡ FRP: ' + (r.frp || '--') + ' MW<br>' +
+                        '📡 المصدر: ' + (r.nasaSource || 'NASA') + '<br>' +
+                        '📌 الحالة: <span class="status-badge status-new">جديد</span><br>' +
+                        (r.isSimulation ? '<span style="color:#9C27B0;font-size:0.7rem;">🧪 بلاغ محاكاة</span>' : '') +
+                        '<hr style="border-color:#444;margin:8px 0;">' +
+                        '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">' +
+                        '<button onclick="window.reportFromNASA(' + r.id + ')" style="background:#f44336;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:0.75rem;">🚨 إرسال بلاغ</button>' +
+                        '<button onclick="window.whatsappFromNASA(' + r.id + ')" style="background:#25D366;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:0.75rem;">📤 واتساب</button>' +
+                        '<button onclick="window.smsFromNASA(' + r.id + ')" style="background:#2196F3;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:0.75rem;">📱 رسالة</button>' +
+                        '<button onclick="window.manageFireFromNASA(' + r.id + ')" style="background:#FF9800;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:0.75rem;">🔥 إدارة</button>' +
+                        '</div></div>';
+                    marker.bindPopup(popup);
+                });
+            }
+
+            window.reportFromNASA = function(id) {
+                var report = reports.find(function(r) { return r.id === id; });
+                if (!report) { showToast('❌ البلاغ غير موجود'); return; }
+                openEmergencyModalWithCoords(report.lat, report.lng);
+                document.getElementById('fireType').value = report.type || 'غابات';
+                document.getElementById('fireSeverity').value = report.severity || 'متوسط';
+                document.getElementById('fireDesc').value = 'بلاغ آلي من NASA - ' + report.description;
+                if (map) map.closePopup();
+            };
+
+            window.manageFireFromNASA = function(id) {
+                var report = reports.find(function(r) { return r.id === id; });
+                if (!report) { showToast('❌ البلاغ غير موجود'); return; }
+                selectedReportId = id;
+                openFireManagement();
+                showToast('🔥 تم فتح إدارة الحريق للبلاغ المحدد');
+            };
+
+            window.whatsappFromNASA = function(id) {
+                var report = reports.find(function(r) { return r.id === id; });
+                if (!report) { showToast('❌ البلاغ غير موجود'); return; }
+                sendWhatsAppMessage(buildReportMessage(report));
+            };
+
+            window.smsFromNASA = function(id) {
+                var report = reports.find(function(r) { return r.id === id; });
+                if (!report) { showToast('❌ البلاغ غير موجود'); return; }
+                sendSMS(buildReportMessage(report));
+            };
+
+            function buildReportMessage(report) {
+                var msg = '🚨 بلاغ حريق - درع الغابة (سوريا)\n\n📍 الموقع: ' + (report.location || 'غير محدد') +
+                    '\n🗺️ الإحداثيات: ' + report.lat.toFixed(5) + ', ' + report.lng.toFixed(5) + '\n🔥 النوع: ' +
+                    report.type + '\n⚠️ الخطورة: ' + report.severity + '\n💨 انتشار: ' + report.spread + ' م/د\n';
+                if (report.nearestStation) {
+                    msg += '🚒 أقرب مركز: ' + report.nearestStation.name + '\n📏 المسافة: ' + report.nearestStation.distance + ' كم\n';
+                }
+                msg += '📌 الحالة: ' + report.status + '\n⏰ الوقت: ' + report.createdAt +
+                    '\n\n🔗 خرائط: https://maps.google.com/?q=' + report.lat + ',' + report.lng;
+                return msg;
+            }
+
+            function sendSMS(message) {
+                var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                if (isMobile) {
+                    window.location.href = 'sms:?body=' + encodeURIComponent(message);
+                } else {
+                    window.open('sms:?body=' + encodeURIComponent(message), '_blank');
+                }
+                showToast('📱 جاري فتح تطبيق الرسائل...');
+            }
+
+            function sendWhatsAppMessage(message) {
+                var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                if (isMobile) {
+                    window.location.href = 'whatsapp://send?text=' + encodeURIComponent(message);
+                    setTimeout(function() {
+                        window.open('https://wa.me/?text=' + encodeURIComponent(message), '_blank');
+                    }, 2000);
+                } else {
+                    window.open('https://wa.me/?text=' + encodeURIComponent(message), '_blank');
+                }
+                showToast('💬 جاري فتح واتساب...');
+            }
+
+            // ===== وظائف الخريطة =====
+            function initMap() {
+                if (typeof L === 'undefined') {
+                    console.error('Leaflet not loaded');
+                    showToast('⚠️ فشل تحميل الخريطة، تأكد من الاتصال بالإنترنت');
+                    return;
+                }
+                baseLayers = {
+                    osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }),
+                    satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri', maxZoom: 19 }),
+                    topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { attribution: '© OpenTopoMap', maxZoom: 17 }),
+                    dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© CartoDB', maxZoom: 19 }),
+                    carto: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '© CartoDB', maxZoom: 19 })
+                };
+                map = L.map('map', { tap: false, layers: [baseLayers.osm] }).setView(SYRIA_CENTER, 6);
+                overlayLayers = {
+                    syriaBorder: L.layerGroup().addTo(map),
+                    fireStations: L.layerGroup().addTo(map),
+                    weather: L.layerGroup().addTo(map),
+                    fireRisk: L.layerGroup().addTo(map),
+                    reports: L.layerGroup().addTo(map),
+                    locations: L.layerGroup().addTo(map),
+                    crews: L.layerGroup().addTo(map),
+                    nasa: L.layerGroup().addTo(map)
+                };
+                loadSyriaBorder();
+                loadFireStations();
+                updateCrewMarkers();
+                updateNASAMarkers();
+
+                drawnItems = new L.FeatureGroup();
+                map.addLayer(drawnItems);
+
+                drawControl = new L.Control.Draw({
+                    draw: {
+                        polygon: { allowIntersection: false, shapeOptions: { color: '#f44336', weight: 3, fillOpacity: 0.2 } },
+                        polyline: { shapeOptions: { color: '#2196F3', weight: 3 } },
+                        rectangle: { shapeOptions: { color: '#f44336', weight: 3, fillOpacity: 0.2 } },
+                        circle: { shapeOptions: { color: '#f44336', weight: 3, fillOpacity: 0.2 } },
+                        marker: false,
+                        circlemarker: false
+                    },
+                    edit: { featureGroup: drawnItems }
+                });
+
+                map.on(L.Draw.Event.CREATED, function(e) {
+                    drawnItems.addLayer(e.layer);
+                    var msg = '';
+                    if (e.layerType === 'polygon' || e.layerType === 'rectangle') {
+                        var area = calculatePolygonArea(e.layer.getLatLngs()[0]) / 1000000;
+                        msg = 'المساحة: ' + area.toFixed(3) + ' كم²';
+                    } else if (e.layerType === 'polyline') {
+                        var dist = 0;
+                        var pts = e.layer.getLatLngs();
+                        for (var i = 1; i < pts.length; i++) dist += pts[i - 1].distanceTo(pts[i]);
+                        msg = 'الطول: ' + (dist / 1000).toFixed(2) + ' كم';
+                    }
+                    if (msg) showToast(msg);
+                });
+
+                map.on('click', function(e) {
+                    currentLat = e.latlng.lat;
+                    currentLng = e.latlng.lng;
+                    selectedReportCoords = { lat: currentLat, lng: currentLng };
+                    if (window._tempMarker) { map.removeLayer(window._tempMarker); }
+                    var marker = L.marker([currentLat, currentLng]).addTo(map);
+                    marker.bindPopup(
+                        '<b>📍 ' + currentLat.toFixed(5) + ', ' + currentLng.toFixed(5) +
+                        '</b><br><button onclick="window.openReportFromMap()" style="background:#f44336;color:#fff;border:none;padding:5px 12px;border-radius:4px;margin-top:5px;cursor:pointer">🚨 إرسال بلاغ</button>'
+                    ).openPopup();
+                    window._tempMarker = marker;
+                    var floatBtn = document.getElementById('floatingReportBtn');
+                    floatBtn.style.display = 'flex';
+                    clearTimeout(window._floatTimer);
+                    window._floatTimer = setTimeout(function() { floatBtn.style.display = 'none'; }, 15000);
+                    updateNearestStationInfo(currentLat, currentLng);
+                });
+
+                updateReportMarkers();
+                updateLocationMarkers();
+
+                if (getSetting('autoLocate', true)) {
+                    setTimeout(locateUser, 1500);
+                }
+            }
+
+            function calculatePolygonArea(latLngs) {
+                if (!latLngs || latLngs.length < 3) return 0;
+                var area = 0;
+                var R = 6371000;
+                for (var i = 0; i < latLngs.length; i++) {
+                    var j = (i + 1) % latLngs.length;
+                    var lat1 = toRad(latLngs[i].lat);
+                    var lat2 = toRad(latLngs[j].lat);
+                    var lng1 = toRad(latLngs[i].lng);
+                    var lng2 = toRad(latLngs[j].lng);
+                    area += lng1 * Math.sin(lat2) - lng2 * Math.sin(lat1);
+                }
+                return Math.abs(area) * R * R / 2;
+            }
+
+            function loadSyriaBorder() {
+                var url = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json';
+                fetch(url)
+                    .then(function(res) { return res.json(); })
+                    .then(function(data) {
+                        var syriaFeature = null;
+                        var features = [];
+                        if (data.objects && data.objects.countries) {
+                            var countries = data.objects.countries;
+                            if (countries.geometries) features = countries.geometries;
+                        } else if (data.features) { features = data.features; }
+                        for (var i = 0; i < features.length; i++) {
+                            var props = features[i].properties || {};
+                            if (props.ISO_A2 === 'SY' || props.iso_a2 === 'SY' || props.id === 'SY' ||
+                                props.name === 'Syria' || props.name === 'سوريا') {
+                                syriaFeature = features[i];
+                                break;
+                            }
+                        }
+                        if (syriaFeature) {
+                            var geoJsonFeature = { type: 'Feature', properties: syriaFeature.properties || {},
+                                geometry: syriaFeature.geometry || syriaFeature };
+                            var style = { color: '#4CAF50', weight: 3, opacity: 0.9, fillColor: '#2a6b2a', fillOpacity: 0.15 };
+                            var layer = L.geoJSON(geoJsonFeature, { style: style }).addTo(overlayLayers.syriaBorder);
+                            syriaBorderLayer = layer;
+                            map.fitBounds(layer.getBounds());
+                            showToast('🇸🇾 تم تحميل حدود سوريا');
+                        } else { showToast('⚠️ لم نتمكن من تحميل حدود سوريا'); }
+                    })
+                    .catch(function(err) { console.error('فشل تحميل حدود سوريا', err);
+                        showToast('⚠️ فشل تحميل حدود سوريا'); });
+            }
+
+            function loadFireStations() {
+                var group = overlayLayers.fireStations;
+                group.clearLayers();
+                if (!document.getElementById('layerFireStations').checked) return;
+                fireStations.forEach(function(s) {
+                    var isDefault = isDefaultStation(s.id);
+                    var iconColor = isDefault ? '#ff6f00' : '#e91e63';
+                    var icon = L.divIcon({
+                        html: '<div style="background:' + iconColor +
+                            ';width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 16px rgba(255,111,0,0.5);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:bold;">🚒</div>',
+                        iconSize: [22, 22],
+                        className: 'firestation-marker'
+                    });
+                    var marker = L.marker([s.lat, s.lng], { icon: icon, draggable: true }).addTo(group);
+                    fireStationMarkers[s.id] = marker;
+                    marker.on('dragend', function(e) {
+                        var newPos = marker.getLatLng();
+                        var station = fireStations.find(function(st) { return st.id === s.id; });
+                        if (station) {
+                            station.lat = newPos.lat;
+                            station.lng = newPos.lng;
+                            saveFireStations();
+                            showToast('📍 تم تحديث موقع ' + station.name);
+                            marker.setPopupContent(buildStationPopup(station));
+                            if (firebaseSyncEnabled && !isDefault) syncFireStationToFirebase(station);
+                        }
+                    });
+                    marker.bindPopup(buildStationPopup(s));
+                });
+            }
+
+            function buildStationPopup(s) {
+                var isDefault = isDefaultStation(s.id);
+                var html = '<div style="min-width:180px;">';
+                html += '<b style="color:#ff6f00;">🚒 ' + s.name + '</b><br>';
+                html += '📋 ' + s.type + (isDefault ? ' <span style="color:#888;font-size:0.7rem;">(افتراضي)</span>' :
+                    ' <span style="color:#e91e63;font-size:0.7rem;">(مضاف)</span>') + '<br>';
+                html += '📍 ' + s.lat.toFixed(5) + ', ' + s.lng.toFixed(5) + '<br>';
+                html += '<div class="station-actions">';
+                if (!isDefault) html += '<button class="btn-sm btn-sm-danger" onclick="window.deleteStation(\'' + s.id + '\')">🗑️ حذف</button>';
+                html += '<button class="btn-sm btn-sm-warning" onclick="window.editStation(\'' + s.id + '\')">✏️ تعديل</button>';
+                html += '<button class="btn-sm btn-sm-info" onclick="window.flyToStation(\'' + s.id + '\')">📍 توجيه</button>';
+                html += '</div></div>';
+                return html;
+            }
+
+            window.flyToStation = function(id) {
+                var s = fireStations.find(function(st) { return st.id === id; });
+                if (s) { map.flyTo([s.lat, s.lng], 14); showToast('🗺️ تم التوجيه إلى ' + s.name); }
+            };
+            window.deleteStation = function(id) {
+                if (isDefaultStation(id)) { showToast('❌ لا يمكن حذف مركز افتراضي'); return; }
+                if (!confirm('⚠️ هل أنت متأكد من حذف هذا المركز؟')) return;
+                fireStations = fireStations.filter(function(s) { return s.id !== id; });
+                saveFireStations();
+                loadFireStations();
+                renderDashboard();
+                showToast('🗑️ تم حذف المركز');
+                deleteFireStationFromFirebase(id);
+            };
+            window.editStation = function(id) {
+                var s = fireStations.find(function(st) { return st.id === id; });
+                if (!s) { showToast('❌ المركز غير موجود'); return; }
+                document.getElementById('editStationId').value = s.id;
+                document.getElementById('editStationName').value = s.name;
+                document.getElementById('editStationLat').value = s.lat;
+                document.getElementById('editStationLng').value = s.lng;
+                document.getElementById('editStationType').value = s.type || 'رئيسي';
+                closeAllModals();
+                document.getElementById('editStationModal').classList.add('active');
+            };
+
+            function saveEditStation() {
+                var id = document.getElementById('editStationId').value;
+                var name = document.getElementById('editStationName').value.trim();
+                var lat = parseFloat(document.getElementById('editStationLat').value);
+                var lng = parseFloat(document.getElementById('editStationLng').value);
+                var type = document.getElementById('editStationType').value;
+                if (!name) { showToast('❌ أدخل اسم المركز'); return; }
+                if (isNaN(lat) || isNaN(lng)) { showToast('❌ أدخل الإحداثيات'); return; }
+                var station = fireStations.find(function(s) { return s.id === id; });
+                if (station) {
+                    station.name = name;
+                    station.lat = lat;
+                    station.lng = lng;
+                    station.type = type || 'رئيسي';
+                    saveFireStations();
+                    loadFireStations();
+                    renderDashboard();
+                    closeModal('editStationModal');
+                    showToast('✅ تم تحديث المركز');
+                    if (firebaseSyncEnabled && !isDefaultStation(id)) syncFireStationToFirebase(station);
+                }
+            }
+
+            function updateCrewMarkers() {
+                var group = overlayLayers.crews;
+                group.clearLayers();
+                if (!document.getElementById('layerCrews').checked) return;
+                fireCrews.forEach(function(c) {
+                    var icon = L.divIcon({
+                        html: '<div style="background:#2196F3;width:20px;height:20px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 12px rgba(33,150,243,0.8);display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:bold;">👨‍🚒</div>',
+                        iconSize: [20, 20],
+                        className: 'crew-marker'
+                    });
+                    var marker = L.marker([c.lat, c.lng], { icon: icon }).addTo(group);
+                    marker.bindPopup('<b style="color:#2196F3;">🚒 طاقم إطفاء</b><br>📛 ' + c.name + '<br>👥 العدد: ' + c.count +
+                        '<br>📍 للحريق رقم: ' + c.reportId);
+                });
+            }
+
+            window.updateReportStatus = function(id, newStatus) {
+                var report = reports.find(function(r) { return r.id === id; });
+                if (!report) { showToast('❌ البلاغ غير موجود'); return; }
+                report.status = newStatus;
+                saveReports();
+                syncReportToFirebase(report);
+                updateReportMarkers();
+                updateNASAMarkers();
+                renderMiniReports();
+                showToast('✅ تم تحديث الحالة');
+                if (map) map.closePopup();
+            };
+
+            function updateReportMarkers() {
+                var group = overlayLayers.reports;
+                group.clearLayers();
+                if (!document.getElementById('layerReports').checked) return;
+                var statusColors = { 'جديد': '#f44336', 'قيد المعالجة': '#FF9800', 'تم الإخماد': '#4CAF50' };
+                reports.forEach(function(r) {
+                    var color = statusColors[r.status] || '#f44336';
+                    var icon = L.divIcon({
+                        html: '<div style="background:' + color + ';width:16px;height:16px;border-radius:50%;border:2px solid white;box-shadow:0 0 12px ' + color + ';"></div>',
+                        iconSize: [16, 16]
+                    });
+                    var marker = L.marker([r.lat, r.lng], { icon: icon }).addTo(group);
+                    var popup = '<div style="min-width:160px;">';
+                    popup += '<b style="color:' + color + ';">🔥 ' + r.type + '</b><br>';
+                    popup += '⚠️ ' + r.severity + '<br>💨 ' + r.spread + ' م/د<br>';
+                    popup += '📌 الحالة: <span class="status-badge status-' + (r.status === 'جديد' ? 'new' : r.status === 'قيد المعالجة' ? 'processing' : 'extinguished') + '">' + r.status + '</span>';
+                    if (r.source === 'NASA_FIRMS') popup += '<br><span style="color:#5c6bc0;font-size:0.7rem;">🛰️ ' + (r.nasaSource || 'NASA') +
+                        ' (ثقة: ' + (r.confidence || '--') + '%)</span>';
+                    popup += '<br><div style="display:flex; gap:4px; margin-top:8px; flex-wrap:wrap;">';
+                    if (r.status !== 'قيد المعالجة' && r.status !== 'تم الإخماد') popup +=
+                        '<button onclick="window.updateReportStatus(' + r.id + ', \'قيد المعالجة\')" style="background:#FF9800;border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem;flex:1;">🔄 قيد المعالجة</button>';
+                    if (r.status !== 'تم الإخماد') popup +=
+                        '<button onclick="window.updateReportStatus(' + r.id + ', \'تم الإخماد\')" style="background:#4CAF50;border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem;flex:1;">✅ تم الإخماد</button>';
+                    if (r.status === 'تم الإخماد') popup +=
+                        '<button onclick="window.updateReportStatus(' + r.id + ', \'جديد\')" style="background:#f44336;border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem;flex:1;">🔄 إعادة فتح</button>';
+                    popup += '</div></div>';
+                    marker.bindPopup(popup);
+                });
+            }
+
+            function updateLocationMarkers() {
+                var group = overlayLayers.locations;
+                group.clearLayers();
+                if (!document.getElementById('layerLocations').checked) return;
+                locations.forEach(function(l) {
+                    var marker = L.marker([l.lat, l.lng]).addTo(group);
+                    marker.bindPopup('<b style="color:#4CAF50;">📍 ' + l.name + '</b>');
+                });
+            }
+
+            function openFireManagement() {
+                closeAllModals();
+                document.getElementById('fireManagementModal').classList.add('active');
+                loadActiveReportsIntoModal();
+                if (selectedReportId !== null) {
+                    selectFireReport(selectedReportId);
+                } else {
+                    var active = reports.filter(function(r) { return r.status !== 'تم الإخماد'; });
+                    if (active.length > 0) selectFireReport(active[0].id);
+                }
+                document.getElementById('mgmtLocation').textContent = '--';
+                document.getElementById('mgmtWeather').textContent = '--';
+                document.getElementById('mgmtTerrain').textContent = '-- م';
+                document.getElementById('mgmtRoute').textContent = '--';
+                document.getElementById('mgmtEta').textContent = '--';
+                document.getElementById('crewListDisplay').innerHTML = '';
+            }
+
+            function loadActiveReportsIntoModal() {
+                var container = document.getElementById('activeReportsList');
+                var active = reports.filter(function(r) { return r.status !== 'تم الإخماد'; });
+                if (active.length === 0) {
+                    container.innerHTML = '<div style="color:#666;text-align:center;padding:10px;">✅ لا توجد حرائق نشطة حالياً</div>';
+                    activateManagementButton(false);
+                    return;
+                }
+                var html = '';
+                active.forEach(function(r) {
+                    var color = r.status === 'جديد' ? '#f44336' : '#FF9800';
+                    var nasaBadge = r.source === 'NASA_FIRMS' ? ' <span style="font-size:0.6rem;color:#5c6bc0;">🛰️</span>' : '';
+                    html += '<div class="fire-item" data-id="' + r.id + '" onclick="window.selectFireReport(' + r.id + ')">';
+                    html += '<div style="font-weight:bold;color:' + color + ';">🔥 ' + r.type + ' - ' + r.severity + nasaBadge + '</div>';
+                    html += '<div class="loc">📍 ' + (r.location || 'غير محدد') + ' | ' + r.lat.toFixed(4) + ', ' + r.lng.toFixed(4) + '</div>';
+                    html += '<div class="loc">📌 الحالة: ' + r.status + '</div>';
+                    html += '</div>';
+                });
+                container.innerHTML = html;
+                if (active.length > 0) {
+                    selectFireReport(active[0].id);
+                    activateManagementButton(true);
+                }
+            }
+
+            window.selectFireReport = function(id) {
+                var report = reports.find(function(r) { return r.id === id; });
+                if (!report) return;
+                selectedManagementReportId = id;
+                selectedReportId = id;
+                document.querySelectorAll('.fire-item').forEach(function(el) {
+                    el.classList.remove('selected');
+                    if (parseInt(el.getAttribute('data-id')) === id) el.classList.add('selected');
+                });
+                document.getElementById('mgmtLocation').textContent = report.location + ' (' + report.lat.toFixed(4) + ', ' + report.lng.toFixed(4) + ')';
+                fetchWeatherForManagement(report.lat, report.lng);
+                fetchElevationForManagement(report.lat, report.lng);
+                fetchRouteForManagement(report.lat, report.lng);
+                var crewsHere = fireCrews.filter(function(c) { return c.reportId === id; });
+                var crewHtml = '';
+                crewsHere.forEach(function(c) { crewHtml += '<span class="crew-badge">👨‍🚒 ' + c.name + ' (' + c.count + ')</span> '; });
+                document.getElementById('crewListDisplay').innerHTML = crewHtml || 'لا توجد طواقم مضافة بعد.';
+                window._managementLat = report.lat;
+                window._managementLng = report.lng;
+                activateManagementButton(true);
+            };
+
+            function activateManagementButton(active) {
+                var btn = document.getElementById('btnFireManagement');
+                if (active) {
+                    btn.classList.add('active');
+                    btn.textContent = '🔥 إدارة (نشط)';
+                } else {
+                    btn.classList.remove('active');
+                    btn.textContent = '🔥 إدارة';
+                }
+            }
+
+            function _selectReportFromList(id) {
+                selectedReportId = id;
+                activateManagementButton(true);
+                showToast('📌 تم تحديد البلاغ رقم ' + id + '، يمكنك استخدام زر "إدارة الحريق"');
+                openFireManagement();
+            }
+
+            function renderMiniReports() {
+                var container = document.getElementById('miniReports');
+                if (!container) return;
+                var max = parseInt(getSetting('maxReports', 5));
+                var displayReports = reports.slice(0, max);
+                if (displayReports.length === 0) {
+                    container.innerHTML = '<div style="color:#666;text-align:center;padding:10px;">لا توجد بلاغات</div>';
+                    activateManagementButton(false);
+                    return;
+                }
+                var html = '';
+                for (var i = 0; i < displayReports.length; i++) {
+                    var r = displayReports[i];
+                    var color = r.status === 'تم الإخماد' ? '#4CAF50' : r.status === 'قيد المعالجة' ? '#FF9800' : '#f44336';
+                    var nasaBadge = r.source === 'NASA_FIRMS' ? ' <span style="font-size:0.6rem;color:#5c6bc0;">🛰️</span>' : '';
+                    var simBadge = r.isSimulation ? ' <span style="font-size:0.6rem;color:#9C27B0;">🧪</span>' : '';
+                    var latestClass = (i < 3) ? 'latest' : '';
+                    html += '<div class="report-mini ' + latestClass + '" onclick="window.selectReportFromList(' + r.id + ')">';
+                    html += '<div style="color:' + color + ';font-weight:bold;font-size:0.85rem;">🔥 ' + r.type + ' - ' + r.severity + nasaBadge + simBadge + '</div>';
+                    html += '<div style="color:#aaa;font-size:0.75rem;">' + r.location + '</div>';
+                    html += '<div style="color:#aaa;font-size:0.75rem;">💨 ' + r.spread + ' م/د</div>';
+                    html += '<div style="color:#888;font-size:0.7rem;">📌 الحالة: <span style="color:' + color + ';">' + r.status + '</span></div>';
+                    if (r.nearestStation) html += '<div style="color:#ff6f00;font-size:0.7rem;">🚒 ' + r.nearestStation.name + ' (' + r.nearestStation.distance + ' كم)</div>';
+                    html += '</div>';
+                }
+                container.innerHTML = html;
+                if (reports.length > max) container.innerHTML +=
+                    '<div style="color:#888;font-size:0.7rem;text-align:center;margin-top:4px;">+ ' + (reports.length - max) + ' بلاغات أخرى</div>';
+                var hasActive = reports.some(function(r) { return r.status !== 'تم الإخماد'; });
+                if (hasActive) activateManagementButton(true);
+                else activateManagementButton(false);
+            }
+
+            window.selectReportFromList = function(id) { _selectReportFromList(id); };
+
+            function fetchWeatherForManagement(lat, lng) {
+                var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lng +
+                    '&current=temperature_2m,wind_speed_10m,relative_humidity_2m';
+                fetch(url).then(function(res) { return res.json(); }).then(function(data) {
+                    document.getElementById('mgmtWeather').textContent = data.current.temperature_2m +
+                        '°C, رياح ' + data.current.wind_speed_10m + ' km/h, رطوبة ' + data.current.relative_humidity_2m + '%';
+                }).catch(function() { document.getElementById('mgmtWeather').textContent = '⚠️ غير متاح'; });
+            }
+
+            function fetchElevationForManagement(lat, lng) {
+                var url = 'https://api.open-meteo.com/v1/elevation?latitude=' + lat + '&longitude=' + lng;
+                fetch(url).then(function(res) { return res.json(); }).then(function(data) {
+                    if (data.elevation && data.elevation.length > 0) document.getElementById('mgmtTerrain').textContent = data.elevation[0].toFixed(1) + ' م';
+                    else document.getElementById('mgmtTerrain').textContent = 'غير متاح';
+                }).catch(function() { document.getElementById('mgmtTerrain').textContent = 'غير متاح'; });
+            }
+
+            function fetchRouteForManagement(destLat, destLng) {
+                var nearest = findNearestStation(destLat, destLng);
+                if (!nearest) {
+                    document.getElementById('mgmtRoute').textContent = 'لا يوجد مركز قريب';
+                    document.getElementById('mgmtEta').textContent = '--';
+                    return;
+                }
+                var origin = nearest.station;
+                var url = 'https://router.project-osrm.org/route/v1/driving/' + origin.lng + ',' + origin.lat + ';' +
+                    destLng + ',' + destLat + '?overview=false';
+                fetch(url).then(function(res) { return res.json(); }).then(function(data) {
+                    if (data.routes && data.routes.length > 0) {
+                        document.getElementById('mgmtRoute').textContent = (data.routes[0].distance / 1000).toFixed(2) + ' كم (عبر ' + origin.name + ')';
+                        document.getElementById('mgmtEta').textContent = Math.ceil(data.routes[0].duration / 60) + ' دقيقة';
+                    } else { throw new Error('no route'); }
+                }).catch(function() {
+                    var dist = nearest.distance;
+                    document.getElementById('mgmtRoute').textContent = dist.toFixed(2) + ' كم (تقديري عبر ' + origin.name + ')';
+                    document.getElementById('mgmtEta').textContent = Math.ceil(dist / 40 * 60) + ' دقيقة (تقديري)';
+                });
+            }
+
+            window.navigateToSelectedFire = function() {
+                if (selectedManagementReportId === null) { showToast('❌ اختر بلاغاً أولاً'); return; }
+                var report = reports.find(function(r) { return r.id === selectedManagementReportId; });
+                if (!report) { showToast('❌ البلاغ غير موجود'); return; }
+                map.flyTo([report.lat, report.lng], 14);
+                showToast('🗺️ تم التوجيه إلى موقع الحريق');
+                closeModal('fireManagementModal');
+            };
+            window.addCrewToFire = function() {
+                if (selectedManagementReportId === null) { showToast('❌ اختر بلاغاً أولاً'); return; }
+                var report = reports.find(function(r) { return r.id === selectedManagementReportId; });
+                if (!report) { showToast('❌ البلاغ غير موجود'); return; }
+                var name = document.getElementById('crewName').value.trim();
+                var count = parseInt(document.getElementById('crewCount').value) || 1;
+                if (!name) { showToast('❌ أدخل اسم الطاقم'); return; }
+                var crew = { id: Date.now(), reportId: report.id, name: name, count: count, lat: report.lat, lng: report.lng, createdAt: new Date().toLocaleString('ar-SY') };
+                fireCrews.push(crew);
+                saveFireCrews();
+                updateCrewMarkers();
+                syncCrewToFirebase(crew);
+                var crewsHere = fireCrews.filter(function(c) { return c.reportId === report.id; });
+                var crewHtml = '';
+                crewsHere.forEach(function(c) { crewHtml += '<span class="crew-badge">👨‍🚒 ' + c.name + ' (' + c.count + ')</span> '; });
+                document.getElementById('crewListDisplay').innerHTML = crewHtml;
+                document.getElementById('crewName').value = '';
+                document.getElementById('crewCount').value = '';
+                showToast('🚒 تم إضافة طاقم ' + name);
+            };
+
+            function locateUser() {
+                if (!navigator.geolocation) { showToast('❌ المتصفح لا يدعم GPS');
+                    updateLocationStatus('error', 'المتصفح لا يدعم GPS'); return; }
+                if (isLocating) { showToast('⏳ جاري التحديد بالفعل...'); return; }
+                isLocating = true;
+                showToast('🔍 جاري تحديد الموقع الدقيق...');
+                updateLocationStatus('searching', 'جاري التحديد...');
+                if (userLocationMarker) { map.removeLayer(userLocationMarker); userLocationMarker = null; }
+                if (userLocationAccuracy) { map.removeLayer(userLocationAccuracy); userLocationAccuracy = null; }
+
+                function startWatching() {
+                    if (locationWatchId) { navigator.geolocation.clearWatch(locationWatchId); locationWatchId = null; }
+                    locationWatchId = navigator.geolocation.watchPosition(
+                        function(pos) {
+                            var lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy;
+                            currentLat = lat; currentLng = lng;
+                            selectedReportCoords = { lat: lat, lng: lng };
+                            if (userLocationMarker) { userLocationMarker.setLatLng([lat, lng]); } else {
+                                var icon = L.divIcon({ html: '<div style="background:#00bcd4;width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 24px rgba(0,188,212,0.8);"></div>',
+                                    iconSize: [18, 18], className: 'user-location-marker' });
+                                userLocationMarker = L.marker([lat, lng], { icon: icon }).addTo(map);
+                                userLocationMarker.bindPopup('📍 موقعك الحالي<br>الدقة: ' + acc.toFixed(0) + ' м');
+                            }
+                            if (userLocationAccuracy) { userLocationAccuracy.setLatLng([lat, lng]); userLocationAccuracy.setRadius(acc); } else {
+                                userLocationAccuracy = L.circle([lat, lng], { radius: acc, color: '#00bcd4',
+                                    fillColor: '#00bcd4', fillOpacity: 0.15, weight: 1, dashArray: '5,5' }).addTo(map);
+                            }
+                            if (!window._locateZoomed) { map.flyTo([lat, lng], 15); window._locateZoomed = true; }
+                            fetchWeather(lat, lng);
+                            updateNearestStationInfo(lat, lng);
+                            document.getElementById('floatingReportBtn').style.display = 'flex';
+                            clearTimeout(window._floatTimer);
+                            window._floatTimer = setTimeout(function() { document.getElementById('floatingReportBtn').style.display = 'none'; }, 20000);
+                            updateLocationStatus('active', 'تم التحديد (دقة ' + acc.toFixed(0) + ' م)');
+                            showToast('✅ تم تحديد موقعك بدقة ' + acc.toFixed(0) + ' م');
+                            isLocating = false;
+                            if (acc < 50 && locationWatchId) { navigator.geolocation.clearWatch(locationWatchId); locationWatchId = null; }
+                        },
+                        function(err) {
+                            var msg = '❌ ';
+                            if (err.code === 1) msg += 'رفض الإذن - اسمح بالوصول إلى الموقع';
+                            else if (err.code === 2) msg += 'الموقع غير متاح مؤقتاً';
+                            else if (err.code === 3) msg += 'انتهى الوقت - حاول مرة أخرى';
+                            else msg += 'خطأ غير معروف';
+                            showToast(msg);
+                            updateLocationStatus('error', msg);
+                            isLocating = false;
+                            if (locationWatchId) { navigator.geolocation.clearWatch(locationWatchId); locationWatchId = null; }
+                        }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 5000 }
+                    );
+                }
+                startWatching();
+            }
+
+            function updateLocationStatus(status, msg) {
+                var el = document.getElementById('locationStatus');
+                if (!el) return;
+                el.textContent = msg || '';
+                el.className = 'location-status';
+                if (status === 'active') el.classList.add('loc-active');
+                else if (status === 'searching') el.classList.add('loc-active');
+                else if (status === 'error') el.classList.add('loc-error');
+                else el.classList.add('loc-inactive');
+            }
+
+            function toggleDrawTools() {
+                drawActive = !drawActive;
+                var btn = document.getElementById('btnDraw');
+                if (drawActive) {
+                    map.addControl(drawControl);
+                    btn.classList.add('btn-draw-active');
+                    btn.textContent = '✏️ رسم (نشط)';
+                    showToast('✏️ أدوات الرسم مفعّلة');
+                } else {
+                    map.removeControl(drawControl);
+                    btn.classList.remove('btn-draw-active');
+                    btn.textContent = '✏️ رسم';
+                    showToast('✏️ تم إيقاف أدوات الرسم');
+                }
+            }
+
+            window.openReportFromMap = function() {
+                if (!selectedReportCoords) { showToast('❌ حدد موقعاً على الخريطة أولاً'); return; }
+                openEmergencyModalWithCoords(selectedReportCoords.lat, selectedReportCoords.lng);
+                document.getElementById('floatingReportBtn').style.display = 'none';
+                if (window._tempMarker) { map.removeLayer(window._tempMarker); window._tempMarker = null; }
+            };
+            document.getElementById('floatingReportBtn').addEventListener('click', function() {
+                if (selectedReportCoords) window.openReportFromMap();
+                else showToast('❌ حدد موقعاً على الخريطة أولاً');
+            });
+
+            function openEmergencyModalWithCoords(lat, lng) {
+                closeAllModals();
+                document.getElementById('emergencyModal').classList.add('active');
+                document.getElementById('fireLat').value = lat.toFixed(5);
+                document.getElementById('fireLng').value = lng.toFixed(5);
+                getLocationName(lat, lng).then(function(name) { document.getElementById('fireLocation').value = name; });
+                updateNearestStationInfo(lat, lng);
+            }
+
+            function openEmergencyModal() {
+                if (selectedReportCoords) openEmergencyModalWithCoords(selectedReportCoords.lat, selectedReportCoords.lng);
+                else openEmergencyModalWithCoords(currentLat, currentLng);
+            }
+
+            function getLocationName(lat, lng) {
+                return fetch('https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng +
+                        '&format=json&accept-language=ar')
+                    .then(function(res) { return res.json(); })
+                    .then(function(data) { return data.display_name ? data.display_name.split(',')[0] : 'غير محدد'; })
+                    .catch(function() { return 'غير محدد'; });
+            }
+
+            function submitReport() {
+                var location = document.getElementById('fireLocation').value;
+                var lat = parseFloat(document.getElementById('fireLat').value);
+                var lng = parseFloat(document.getElementById('fireLng').value);
+                var type = document.getElementById('fireType').value;
+                var severity = document.getElementById('fireSeverity').value;
+                var desc = document.getElementById('fireDesc').value;
+                if (isNaN(lat) || isNaN(lng)) { showToast('❌ حدد الموقع'); return; }
+                if (!type) { showToast('❌ اختر النوع'); return; }
+                var nearest = findNearestStation(lat, lng);
+                var report = {
+                    id: Date.now(),
+                    location: location || 'غير محدد',
+                    lat: lat, lng: lng, type: type, severity: severity, description: desc,
+                    weather: currentWeather, spread: currentSpread.toFixed(1),
+                    nearestStation: nearest ? { name: nearest.station.name, distance: nearest.distance.toFixed(2),
+                        direction: nearest.direction } : null,
+                    status: 'جديد', createdAt: new Date().toLocaleString('ar-SY')
+                };
+                reports.unshift(report);
+                saveReports();
+                updateReportMarkers();
+                renderMiniReports();
+                syncReportToFirebase(report);
+                selectedReportId = report.id;
+                activateManagementButton(true);
+                closeModal('emergencyModal');
+                document.getElementById('fireDesc').value = '';
+                document.getElementById('fireType').value = '';
+                document.getElementById('fireSeverity').value = '';
+                showToast('🚨 تم إرسال البلاغ');
+            }
+
+            function sendReportViaWhatsapp() {
+                var lat = parseFloat(document.getElementById('fireLat').value);
+                var lng = parseFloat(document.getElementById('fireLng').value);
+                var location = document.getElementById('fireLocation').value;
+                var type = document.getElementById('fireType').value;
+                var severity = document.getElementById('fireSeverity').value;
+                var desc = document.getElementById('fireDesc').value;
+                if (isNaN(lat) || isNaN(lng)) { showToast('❌ حدد الموقع أولاً'); return; }
+                if (!type) { showToast('❌ اختر النوع'); return; }
+                var nearest = findNearestStation(lat, lng);
+                var msg = '🚨 بلاغ حريق - درع الغابة (سوريا)\n\n📍 الموقع: ' + (location || 'غير محدد') +
+                    '\n🗺️ الإحداثيات: ' + lat.toFixed(5) + ', ' + lng.toFixed(5) + '\n🔥 النوع: ' + type +
+                    '\n⚠️ الخطورة: ' + severity + '\n💨 انتشار: ' + currentSpread.toFixed(1) + ' م/د\n';
+                if (currentWeather) { msg += '🌡️ الحرارة: ' + currentWeather.temp.toFixed(1) + '°C\n💨 الرياح: ' + currentWeather.windSpeed.toFixed(1) + ' km/h\n'; }
+                if (nearest) { msg += '🚒 أقرب مركز: ' + nearest.station.name + '\n📏 المسافة: ' + nearest.distance.toFixed(2) + ' كم\n🧭 الاتجاه: ' + nearest.direction + '\n'; }
+                msg += '📝 الوصف: ' + (desc || 'لا يوجد') + '\n⏰ الوقت: ' + new Date().toLocaleString('ar-SY') +
+                    '\n\n🔗 خرائط: https://maps.google.com/?q=' + lat + ',' + lng;
+                sendWhatsAppMessage(msg);
+            }
+
+            function sendReportViaSMS() {
+                var lat = parseFloat(document.getElementById('fireLat').value);
+                var lng = parseFloat(document.getElementById('fireLng').value);
+                var location = document.getElementById('fireLocation').value;
+                var type = document.getElementById('fireType').value;
+                var severity = document.getElementById('fireSeverity').value;
+                var desc = document.getElementById('fireDesc').value;
+                if (isNaN(lat) || isNaN(lng)) { showToast('❌ حدد الموقع أولاً'); return; }
+                if (!type) { showToast('❌ اختر النوع'); return; }
+                var nearest = findNearestStation(lat, lng);
+                var msg = '🚨 بلاغ حريق - درع الغابة (سوريا)\n\n📍 الموقع: ' + (location || 'غير محدد') +
+                    '\n🗺️ الإحداثيات: ' + lat.toFixed(5) + ', ' + lng.toFixed(5) + '\n🔥 النوع: ' + type +
+                    '\n⚠️ الخطورة: ' + severity + '\n💨 انتشار: ' + currentSpread.toFixed(1) + ' م/د\n';
+                if (currentWeather) { msg += '🌡️ الحرارة: ' + currentWeather.temp.toFixed(1) + '°C\n💨 الرياح: ' + currentWeather.windSpeed.toFixed(1) + ' km/h\n'; }
+                if (nearest) { msg += '🚒 أقرب مركز: ' + nearest.station.name + '\n📏 المسافة: ' + nearest.distance.toFixed(2) + ' كم\n🧭 الاتجاه: ' + nearest.direction + '\n'; }
+                msg += '📝 الوصف: ' + (desc || 'لا يوجد') + '\n⏰ الوقت: ' + new Date().toLocaleString('ar-SY') +
+                    '\n\n🔗 خرائط: https://maps.google.com/?q=' + lat + ',' + lng;
+                sendSMS(msg);
+            }
+
+            function shareLatestReport() {
+                if (reports.length === 0) { showToast('❌ لا توجد بلاغات'); return; }
+                sendWhatsAppMessage(buildReportMessage(reports[0]));
+            }
+            function shareLatestReportSMS() {
+                if (reports.length === 0) { showToast('❌ لا توجد بلاغات'); return; }
+                sendSMS(buildReportMessage(reports[0]));
+            }
+
+            function openFirestationModal() {
+                closeAllModals();
+                document.getElementById('firestationModal').classList.add('active');
+                if (selectedReportCoords) {
+                    document.getElementById('stationLat').value = selectedReportCoords.lat.toFixed(5);
+                    document.getElementById('stationLng').value = selectedReportCoords.lng.toFixed(5);
+                } else if (currentLat && currentLng) {
+                    document.getElementById('stationLat').value = currentLat.toFixed(5);
+                    document.getElementById('stationLng').value = currentLng.toFixed(5);
+                }
+            }
+
+            function saveFirestation() {
+                var name = document.getElementById('stationName').value.trim();
+                var lat = parseFloat(document.getElementById('stationLat').value);
+                var lng = parseFloat(document.getElementById('stationLng').value);
+                var type = document.getElementById('stationType').value;
+                if (!name) { showToast('❌ أدخل اسم المركز'); return; }
+                if (isNaN(lat) || isNaN(lng)) { showToast('❌ أدخل الإحداثيات'); return; }
+                var station = { id: 'st_' + Date.now(), name: name, lat: lat, lng: lng, type: type || 'مركز' };
+                fireStations.push(station);
+                saveFireStations();
+                loadFireStations();
+                syncFireStationToFirebase(station);
+                closeModal('firestationModal');
+                document.getElementById('stationName').value = '';
+                showToast('✅ تم إضافة مركز الإطفاء');
+            }
+
+            function openLocationModal() {
+                closeAllModals();
+                document.getElementById('locationModal').classList.add('active');
+                if (selectedReportCoords) {
+                    document.getElementById('latInput').value = selectedReportCoords.lat.toFixed(5);
+                    document.getElementById('lngInput').value = selectedReportCoords.lng.toFixed(5);
+                } else if (currentLat && currentLng) {
+                    document.getElementById('latInput').value = currentLat.toFixed(5);
+                    document.getElementById('lngInput').value = currentLng.toFixed(5);
+                }
+            }
+
+            function saveLocation() {
+                var name = document.getElementById('pointName').value.trim();
+                var lat = parseFloat(document.getElementById('latInput').value);
+                var lng = parseFloat(document.getElementById('lngInput').value);
+                if (!name) { showToast('❌ أدخل الاسم'); return; }
+                if (isNaN(lat) || isNaN(lng)) { showToast('❌ أدخل الإحداثيات'); return; }
+                var loc = { id: Date.now(), name: name, lat: lat, lng: lng, createdAt: new Date().toLocaleString('ar-SY') };
+                locations.push(loc);
+                saveLocations();
+                updateLocationMarkers();
+                syncLocationToFirebase(loc);
+                closeModal('locationModal');
+                document.getElementById('pointName').value = '';
+                showToast('✅ تم حفظ الموقع');
+            }
+
+            function clearEdits() {
+                if (drawnItems) drawnItems.clearLayers();
+                if (window._tempMarker) { map.removeLayer(window._tempMarker); window._tempMarker = null; }
+                document.getElementById('floatingReportBtn').style.display = 'none';
+                showToast('🗑️ تم حذف التعديلات');
+            }
+
+            function clearClosedReports() {
+                var closed = reports.filter(function(r) { return r.status === 'تم الإخماد'; });
+                if (closed.length === 0) { showToast('✅ لا توجد بلاغات مغلقة'); return; }
+                if (!confirm('⚠️ سيتم حذف ' + closed.length + ' بلاغات مغلقة. هل أنت متأكد؟')) return;
+                reports = reports.filter(function(r) { return r.status !== 'تم الإخماد'; });
+                saveReports();
+                updateReportMarkers();
+                updateNASAMarkers();
+                renderMiniReports();
+                showToast('🧹 تم حذف ' + closed.length + ' بلاغات مغلقة');
+            }
+
+            function clearAllReports() {
+                if (reports.length === 0) { showToast('✅ لا توجد بلاغات'); return; }
+                if (!confirm('⚠️ سيتم حذف جميع البلاغات (' + reports.length + '). هل أنت متأكد؟')) return;
+                reports = [];
+                saveReports();
+                updateReportMarkers();
+                updateNASAMarkers();
+                renderMiniReports();
+                showToast('🗑️ تم مسح جميع البلاغات');
+            }
+
+            function renderDashboard() {
+                var sidebar = document.getElementById('sidebar');
+                var settings = getSettings();
+                var html = '';
+                html += '<div class="sidebar-header">📊 لوحة المعلومات v3.0</div>';
+
+                html += '<div class="nasa-status-bar" id="nasaStatusBar">';
+                html += '<div class="status-title">🛰️ حالة NASA FIRMS</div>';
+                html += '<div class="status-row"><span class="status-label">الحالة</span><span class="status-value" id="nasaMainStatus">⏳ جاري التحميل...</span></div>';
+                html += '<div class="status-row"><span class="status-label">آخر فحص</span><span class="status-value" id="nasaLastCheck">--</span></div>';
+                html += '<div class="status-row"><span class="status-label">آخر نجاح</span><span class="status-value" id="nasaLastSuccess">--</span></div>';
+                html += '<div class="status-row"><span class="status-label">النقاط الأخيرة</span><span class="status-value" id="nasaPoints">0</span></div>';
+                html += '<div class="nasa-actions">';
+                html += '<button class="btn-test" onclick="window.testNASAConnection()">🧪 اختبار</button>';
+                html += '<button class="btn-refresh" onclick="window.fetchAllNASASources()">🔄 جلب</button>';
+                html += '<button class="btn-sim" onclick="window.simulateNASAFire()">🎮 محاكاة</button>';
+                html += '</div></div>';
+
+                html += '<div class="card"><div class="card-title">📍 الموقع الدقيق</div>';
+                html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#aaa;">الحالة</span><span id="locationStatus" class="location-status loc-inactive">غير مفعّل</span></div>';
+                html += '<div id="locationAccuracy" style="color:#888;font-size:0.7rem;text-align:center;margin-top:4px;">اضغط على "موقعي" لتحديد موقعك</div>';
+                html += '<button class="btn btn-location" id="btnLocateDashboard" style="width:100%;margin-top:6px;font-size:0.8rem;padding:6px;">📍 تفعيل الموقع الدقيق</button></div>';
+
+                html += '<div class="card" id="firebaseStatusCard"><div class="card-title">☁️ حالة Firebase</div>';
+                html += '<div class="card-row"><span>🔌 الاتصال</span><span class="card-value" id="fbStatus">جاري التحميل...</span></div>';
+                html += '<div class="card-row"><span>👤 المستخدم</span><span class="card-value" id="fbUser">--</span></div>';
+                html += '<div class="card-row"><span>📡 المزامنة</span><span class="card-value" id="fbSync">--</span></div>';
+                html += '<div class="card-row"><span>🔔 الإشعارات</span><span class="card-value" id="notifStatus">--</span></div></div>';
+
+                html += '<div class="card"><div class="card-title">🌤️ الطقس الحي</div>';
+                html += '<div class="compass"><div class="compass-arrow" id="windArrow"></div></div>';
+                html += '<div class="card-row"><span>🌡️ الحرارة</span><span class="card-value hot" id="tempVal">--°C</span></div>';
+                html += '<div class="card-row"><span>💨 الرياح</span><span class="card-value wind" id="windSpd">-- km/h</span></div>';
+                html += '<div class="card-row"><span>🧭 الاتجاه</span><span class="card-value" id="windDir">--</span></div>';
+                html += '<div class="card-row"><span>💧 الرطوبة</span><span class="card-value" id="humVal">--%</span></div></div>';
+
+                html += '<div class="card spread-card"><div class="card-title">🔥 توقع الانتشار</div>';
+                html += '<div class="spread-value" id="spreadSpeed">--</div>';
+                html += '<div style="text-align:center;color:#888;font-size:0.75rem">متر / الدقيقة</div>';
+                html += '<div style="color:#aaa;font-size:0.8rem;text-align:center;margin-top:6px" id="spreadInfo">--</div></div>';
+
+                html += '<div class="card"><div class="card-title">🚒 مراكز الإطفاء</div>';
+                html += '<div style="color:#aaa;font-size:0.8rem;margin-bottom:4px">' + fireStations.length +
+                    ' مركز (' + fireStations.filter(function(s) { return isDefaultStation(s.id); }).length +
+                    ' افتراضي، ' + fireStations.filter(function(s) { return !isDefaultStation(s.id); }).length +
+                    ' مضاف)</div>';
+                html += '<button class="btn btn-firestation" id="btnViewStations" style="width:100%;font-size:0.8rem;padding:6px;">📍 عرض الكل على الخريطة</button></div>';
+
+                html += '<div class="card"><div class="card-title">🗺️ فتح في تطبيق</div><div class="integration-btns">';
+                html += '<button class="int-btn" data-app="earth">🌍 Google Earth <span class="badge badge-off">معطل</span></button>';
+                html += '<button class="int-btn" data-app="maps">🗺️ Google Maps <span class="badge badge-off">معطل</span></button>';
+                html += '<button class="int-btn" data-app="osm">🌐 خرائط مفتوحة <span class="badge badge-on">يعمل</span></button>';
+                html += '</div></div>';
+
+                html += '<div class="whatsapp-section"><div style="color:#4CAF50;font-weight:bold;margin-bottom:8px;">💬 إرسال عبر واتساب</div>';
+                html += '<button class="btn btn-whatsapp" id="btnWhatsappShare" style="width:100%;">📤 إرسال آخر بلاغ عبر واتساب</button>';
+                html += '<button class="btn btn-info" id="btnSmsShare" style="width:100%;margin-top:4px;">📱 إرسال آخر بلاغ عبر رسالة نصية</button></div>';
+
+                html += '<div class="card"><div class="card-title">📋 آخر البلاغات</div>';
+                html += '<div id="miniReports"></div>';
+                html += '<div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">';
+                html += '<button class="btn btn-danger" id="btnClearClosed" style="flex:1;font-size:0.75rem;padding:4px;">🧹 حذف المغلقة</button>';
+                html += '<button class="btn btn-clear" id="btnClearAllReports" style="flex:1;font-size:0.75rem;padding:4px;">🗑️ مسح الكل</button>';
+                html += '</div></div>';
+
+                html += '<div class="card"><div class="card-title">📋 سجل الأخطاء</div>';
+                html += '<div id="errorLogContainer" class="error-log active"></div></div>';
+
+                html += '<div id="lastUpdate">آخر تحديث: --</div>';
+                sidebar.innerHTML = html;
+                attachUIEvents();
+                if (currentWeather) updateWeatherUI();
+                renderMiniReports();
+                updateErrorLogDisplay();
+                updateNASAStatusUI();
+                updateNotificationStatus();
+                initFloatingSettingsState();
+            }
+
+            function updateNotificationStatus() {
+                var el = document.getElementById('notifStatus');
+                if (!el) return;
+                if (!('Notification' in window)) { el.textContent = '❌ غير مدعوم'; el.style.color = '#f44336'; return; }
+                if (Notification.permission === 'granted') { el.textContent = '✅ مفعّلة'; el.style.color = '#4CAF50'; }
+                else if (Notification.permission === 'denied') { el.textContent = '❌ مرفوضة'; el.style.color = '#f44336'; }
+                else { el.textContent = '⏳ بانتظار الإذن'; el.style.color = '#FF9800'; }
+            }
+
+            function initFloatingSettingsState() {
+                var settings = getSettings();
+                document.querySelectorAll('.toggle-switch').forEach(function(toggle) {
+                    var key = toggle.getAttribute('data-setting');
+                    var defaultVal = (key === 'autoLocate' || key === 'fireAlerts' || key === 'autoWeather' ||
+                        key === 'nasaAlerts' || key === 'notificationsEnabled');
+                    var val = settings[key] !== undefined ? settings[key] : defaultVal;
+                    if (val) toggle.classList.add('active');
+                    else toggle.classList.remove('active');
+                });
+                var maxReportsSel = document.getElementById('maxReportsSelect');
+                if (maxReportsSel) {
+                    maxReportsSel.value = parseInt(getSetting('maxReports', 5));
+                }
+            }
+
+            function attachUIEvents() {
+                document.getElementById('btnEmergency').addEventListener('click', openEmergencyModal);
+                document.getElementById('btnLocate').addEventListener('click', locateUser);
+                document.getElementById('btnDraw').addEventListener('click', toggleDrawTools);
+                document.getElementById('btnAddLocation').addEventListener('click', openLocationModal);
+                document.getElementById('btnAddFireStation').addEventListener('click', openFirestationModal);
+                document.getElementById('btnClearEdits').addEventListener('click', clearEdits);
+                document.getElementById('btnResetStations').addEventListener('click', resetToDefaultStations);
+                document.getElementById('btnSubmitReport').addEventListener('click', submitReport);
+                document.getElementById('btnWhatsappFromReport').addEventListener('click', sendReportViaWhatsapp);
+                document.getElementById('btnSMSFromReport').addEventListener('click', sendReportViaSMS);
+                document.getElementById('btnCloseEmergency').addEventListener('click', function() { closeModal('emergencyModal'); });
+                document.getElementById('btnSaveLocation').addEventListener('click', saveLocation);
+                document.getElementById('btnCloseLocation').addEventListener('click', function() { closeModal('locationModal'); });
+                document.getElementById('btnSaveStation').addEventListener('click', saveFirestation);
+                document.getElementById('btnCloseStation').addEventListener('click', function() { closeModal('firestationModal'); });
+                document.getElementById('btnCloseManagement').addEventListener('click', function() { closeModal('fireManagementModal'); });
+                document.getElementById('btnNavigateToFire').addEventListener('click', window.navigateToSelectedFire);
+                document.getElementById('btnAddCrew').addEventListener('click', window.addCrewToFire);
+                document.getElementById('btnSaveEditStation').addEventListener('click', saveEditStation);
+                document.getElementById('btnCloseEditStation').addEventListener('click', function() { closeModal('editStationModal'); });
+
+                document.getElementById('btnNASA').addEventListener('click', function() {
+                    document.getElementById('nasaStatusModal').classList.add('active');
+                    testNASAConnection();
+                });
+                document.getElementById('btnCloseNASA').addEventListener('click', function() { closeModal('nasaStatusModal'); });
+                document.getElementById('btnTestNASA').addEventListener('click', testNASAConnection);
+                document.getElementById('btnFetchNASA').addEventListener('click', fetchAllNASASources);
+                document.getElementById('btnSimulateNASA').addEventListener('click', simulateNASAFire);
+
+                var locateDash = document.getElementById('btnLocateDashboard');
+                if (locateDash) locateDash.addEventListener('click', locateUser);
+
+                document.querySelectorAll('.toggle-switch').forEach(function(toggle) {
+                    toggle.addEventListener('click', function() {
+                        var key = this.getAttribute('data-setting');
+                        var active = this.classList.toggle('active');
+                        setSetting(key, active);
+                        if (key === 'autoLocate' && active) locateUser();
+                        if (key === 'notificationsEnabled' && active) requestNotificationPermission();
+                    });
+                });
+
+                var maxReportsSel = document.getElementById('maxReportsSelect');
+                if (maxReportsSel) {
+                    maxReportsSel.addEventListener('change', function() {
+                        setSetting('maxReports', parseInt(this.value));
+                        renderMiniReports();
+                    });
+                }
+
+                document.querySelectorAll('.int-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        var app = this.getAttribute('data-app');
+                        var lat = currentLat, lng = currentLng;
+                        if (app === 'earth') window.open('https://earth.google.com/web/search/' + lat + ',' + lng, '_blank');
+                        else if (app === 'maps') window.open('https://www.google.com/maps/search/?api=1&query=' + lat + ',' + lng, '_blank');
+                        else if (app === 'osm') window.open('https://www.openstreetmap.org/?mlat=' + lat + '&mlon=' + lng + '&zoom=14', '_blank');
+                    });
+                });
+
+                document.getElementById('btnClearClosed').addEventListener('click', clearClosedReports);
+                document.getElementById('btnClearAllReports').addEventListener('click', clearAllReports);
+
+                var viewStationsBtn = document.getElementById('btnViewStations');
+                if (viewStationsBtn) viewStationsBtn.addEventListener('click', function() {
+                    if (fireStations.length > 0) {
+                        var group = new L.featureGroup();
+                        fireStations.forEach(function(s) {
+                            var m = L.marker([s.lat, s.lng]);
+                            m.bindPopup('<b style="color:#ff6f00;">🚒 ' + s.name + '</b>');
+                            group.addLayer(m);
+                        });
+                        map.fitBounds(group.getBounds().pad(0.1));
+                    }
+                });
+
+                var waShareBtn = document.getElementById('btnWhatsappShare');
+                if (waShareBtn) waShareBtn.addEventListener('click', shareLatestReport);
+                var smsShareBtn = document.getElementById('btnSmsShare');
+                if (smsShareBtn) smsShareBtn.addEventListener('click', shareLatestReportSMS);
+
+                document.getElementById('layerToggleBtn').addEventListener('click', function() {
+                    document.getElementById('layerPanel').classList.toggle('active');
+                });
+                document.querySelectorAll('input[name="basemap"]').forEach(function(el) {
+                    el.addEventListener('change', function() { if (this.checked) setBasemap(this.value); });
+                });
+                document.getElementById('layerSyriaBorder').addEventListener('change', function() {
+                    var g = overlayLayers.syriaBorder;
+                    if (this.checked) map.addLayer(g);
+                    else map.removeLayer(g);
+                });
+                document.getElementById('layerFireStations').addEventListener('change', loadFireStations);
+                document.getElementById('layerWeather').addEventListener('change', function() {
+                    if (this.checked) {
+                        weatherGridCache = null;
+                        weatherGridCacheTime = 0;
+                        updateWeatherLayer();
+                    } else {
+                        overlayLayers.weather.clearLayers();
+                        document.getElementById('weatherLegend').classList.remove('active');
+                    }
+                });
+                document.getElementById('layerFireRisk').addEventListener('change', updateFireRiskLayer);
+                document.getElementById('layerReports').addEventListener('change', updateReportMarkers);
+                document.getElementById('layerLocations').addEventListener('change', updateLocationMarkers);
+                document.getElementById('layerCrews').addEventListener('change', updateCrewMarkers);
+                document.getElementById('layerNASA').addEventListener('change', updateNASAMarkers);
+
+                document.getElementById('btnFireManagement').addEventListener('click', openFireManagement);
+            }
+
+            function setBasemap(name) {
+                for (var key in baseLayers) { if (map.hasLayer(baseLayers[key])) map.removeLayer(baseLayers[key]); }
+                if (baseLayers[name]) { map.addLayer(baseLayers[name]); currentBasemap = name; }
+            }
+
+            function calculateFireRisk(temp, humidity, windSpeed) {
+                var risk = 0;
+                risk += (temp - 20) * 2;
+                risk += windSpeed * 2;
+                risk += (30 - humidity) * 2;
+                risk = Math.max(0, Math.min(100, risk));
+                return risk;
+            }
+
+            function updateFireRiskLayer() {
+                var group = overlayLayers.fireRisk;
+                group.clearLayers();
+                if (!document.getElementById('layerFireRisk').checked) return;
+
+                var gridPoints = [];
+                for (var lat = 32.5; lat <= 37.5; lat += 1.5) {
+                    for (var lng = 35.5; lng <= 42.5; lng += 1.5) {
+                        gridPoints.push({ lat: lat, lng: lng });
+                    }
+                }
+                fireStations.forEach(function(s) { gridPoints.push({ lat: s.lat, lng: s.lng }); });
+
+                var uniquePoints = [];
+                gridPoints.forEach(function(p) {
+                    var exists = uniquePoints.some(function(u) {
+                        return haversineDistance(u.lat, u.lng, p.lat, p.lng) < 0.3;
+                    });
+                    if (!exists) uniquePoints.push(p);
+                });
+
+                var promises = uniquePoints.map(function(point) {
+                    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + point.lat +
+                              '&longitude=' + point.lng +
+                              '&current=temperature_2m,relative_humidity_2m,wind_speed_10m';
+                    return fetch(url)
+                        .then(function(res) { return res.json(); })
+                        .then(function(data) {
+                            return {
+                                lat: point.lat, lng: point.lng,
+                                temp: data.current.temperature_2m,
+                                humidity: data.current.relative_humidity_2m,
+                                windSpeed: data.current.wind_speed_10m,
+                                risk: calculateFireRisk(data.current.temperature_2m, data.current.relative_humidity_2m, data.current.wind_speed_10m)
+                            };
+                        })
+                        .catch(function() { return null; });
+                });
+
+                Promise.all(promises).then(function(results) {
+                    results.forEach(function(r) {
+                        if (!r) return;
+                        var color = r.risk >= 70 ? '#f44336' : r.risk >= 40 ? '#FF9800' : '#4CAF50';
+                        var circle = L.circle([r.lat, r.lng], {
+                            radius: 25000, color: color, fillColor: color,
+                            fillOpacity: 0.35, weight: 2
+                        }).addTo(group);
+                        circle.bindPopup(
+                            '<div style="text-align:center;min-width:150px;">' +
+                            '<b style="color:' + color + ';">🔥 خطر الحرائق: ' + r.risk.toFixed(0) + '%</b><br>' +
+                            '🌡️ ' + r.temp + '°C<br>' +
+                            '💨 ' + r.windSpeed + ' كم/س<br>' +
+                            '💧 ' + r.humidity + '%' +
+                            '</div>'
+                        );
+                    });
+                });
+            }
+
+            function showToast(msg, type) {
+                var toast = document.getElementById('toast');
+                toast.textContent = msg;
+                toast.className = 'toast show';
+                if (type === 'success') toast.classList.add('toast-success');
+                else if (type === 'error') toast.classList.add('toast-error');
+                else if (type === 'warning') toast.classList.add('toast-warning');
+                else if (type === 'info') toast.classList.add('toast-info');
+                setTimeout(function() { toast.classList.remove('show'); toast.className = 'toast'; }, 4000);
+            }
+
+            function showLocalNotification(title, body, data) {
+                if (!('Notification' in window)) return;
+                if (Notification.permission === 'granted') {
+                    var notification = new Notification(title, {
+                        body: body,
+                        icon: 'assets/icon-192.png',
+                        badge: 'assets/icon-192.png',
+                        tag: data && data.tag ? data.tag : 'forest-shield-alert',
+                        requireInteraction: true,
+                        data: data
+                    });
+                    notification.onclick = function() {
+                        window.focus();
+                        if (data && data.lat && data.lng) {
+                            map.flyTo([parseFloat(data.lat), parseFloat(data.lng)], 14);
+                        }
+                    };
+                }
+            }
+
+            function requestNotificationPermission() {
+                if (!('Notification' in window)) { showToast('❌ المتصفح لا يدعم الإشعارات'); return; }
+                Notification.requestPermission().then(function(permission) {
+                    if (permission === 'granted') {
+                        showToast('✅ تم تفعيل الإشعارات');
+                        setSetting('notificationsEnabled', true);
+                    } else {
+                        showToast('❌ تم رفض الإشعارات');
+                        setSetting('notificationsEnabled', false);
+                    }
+                });
+            }
+
+            function initFirebaseAuth() {
+                if (!auth) return;
+                auth.onAuthStateChanged(function(user) {
+                    if (user) {
+                        firebaseUser = user;
+                        console.log('Firebase user:', user.uid);
+                        updateFirebaseStatusUI();
+                        initFirebaseMessaging();
+                    } else {
+                        auth.signInAnonymously().catch(function(err) { console.error('Auth error:', err); });
+                    }
+                });
+            }
+
+            function initFirebaseMessaging() {
+                if (!messaging) return;
+                messaging.getToken({ vapidKey: 'BEl62iJSqZkQ8kC_9P0H8z7V2x8Q8kC_9P0H8z7V2x8' })
+                    .then(function(token) {
+                        if (token) {
+                            console.log('FCM Token:', token);
+                            localStorage.setItem('fcmToken', token);
+                        }
+                    })
+                    .catch(function(err) { console.warn('FCM token error:', err); });
+                messaging.onMessage(function(payload) {
+                    console.log('Message received:', payload);
+                    showLocalNotification(payload.notification.title, payload.notification.body, payload.data);
+                });
+            }
+
+            function updateFirebaseStatusUI() {
+                var statusEl = document.getElementById('fbStatus');
+                var userEl = document.getElementById('fbUser');
+                var syncEl = document.getElementById('fbSync');
+                if (!statusEl) return;
+                if (db) {
+                    statusEl.textContent = '🟢 متصل'; statusEl.style.color = '#4CAF50';
+                } else {
+                    statusEl.textContent = '🔴 غير متصل'; statusEl.style.color = '#f44336';
+                }
+                if (firebaseUser) {
+                    userEl.textContent = '✅ مجهول'; userEl.style.color = '#4CAF50';
+                } else {
+                    userEl.textContent = '⏳ جاري...'; userEl.style.color = '#FF9800';
+                }
+                var syncEnabled = getSetting('firebaseSync', true);
+                syncEl.textContent = syncEnabled ? '🟢 مفعّلة' : '🔴 معطّلة';
+                syncEl.style.color = syncEnabled ? '#4CAF50' : '#f44336';
+            }
+
+            function listenToFirebaseReports() {
+                if (!db) return;
+                db.collection('reports').orderBy('createdAt', 'desc').onSnapshot(function(snapshot) {
+                    snapshot.docChanges().forEach(function(change) {
+                        if (change.type === 'added') {
+                            var data = change.doc.data();
+                            var exists = reports.some(function(r) { return r.id === data.id; });
+                            if (!exists) {
+                                reports.unshift(data);
+                                saveReports();
+                                updateReportMarkers();
+                                renderMiniReports();
+                            }
+                        }
+                    });
+                });
+            }
+
+            function listenToFirebaseLocations() {
+                if (!db) return;
+                db.collection('locations').onSnapshot(function(snapshot) {
+                    snapshot.docChanges().forEach(function(change) {
+                        if (change.type === 'added') {
+                            var data = change.doc.data();
+                            var exists = locations.some(function(l) { return l.id === data.id; });
+                            if (!exists) {
+                                locations.push(data);
+                                saveLocations();
+                                updateLocationMarkers();
+                            }
+                        }
+                    });
+                });
+            }
+
+            function listenToFirebaseStations() {
+                if (!db) return;
+                db.collection('fireStations').onSnapshot(function(snapshot) {
+                    snapshot.docChanges().forEach(function(change) {
+                        if (change.type === 'added') {
+                            var data = change.doc.data();
+                            var exists = fireStations.some(function(s) { return s.id === data.id; });
+                            if (!exists) {
+                                fireStations.push(data);
+                                saveFireStations();
+                                loadFireStations();
+                            }
+                        }
+                    });
+                });
+            }
+
+            function listenToFirebaseCrews() {
+                if (!db) return;
+                db.collection('fireCrews').onSnapshot(function(snapshot) {
+                    snapshot.docChanges().forEach(function(change) {
+                        if (change.type === 'added') {
+                            var data = change.doc.data();
+                            var exists = fireCrews.some(function(c) { return c.id === data.id; });
+                            if (!exists) {
+                                fireCrews.push(data);
+                                saveFireCrews();
+                                updateCrewMarkers();
+                            }
+                        }
+                    });
+                });
+            }
+
+            function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+            function closeAllModals() { document.querySelectorAll('.modal-overlay').forEach(function(m) { m.classList.remove('active'); }); }
+
+            function hideSplash() {
+                var splash = document.getElementById('splashScreen');
+                if (splash) { splash.classList.add('hidden'); setTimeout(function() { splash.remove(); }, 1000); }
+            }
+
+            function initApp() {
+                loadData();
+                initMap();
+                renderDashboard();
+                fetchWeather(currentLat, currentLng);
+                initFirebaseAuth();
+
+                if (getSetting('notificationsEnabled', true)) {
+                    requestNotificationPermission();
+                }
+
+                setTimeout(function() {
+                    listenToFirebaseReports();
+                    listenToFirebaseLocations();
+                    listenToFirebaseStations();
+                    listenToFirebaseCrews();
+                    updateFirebaseStatusUI();
+                    setInterval(updateFirebaseStatusUI, 10000);
+                }, 2000);
+
+                setInterval(function() {
+                    if (getSetting('autoWeather', true)) {
+                        fetchWeather(currentLat, currentLng);
+                        updateFireRiskLayer();
+                    }
+                }, 300000);
+
+                function scheduleNASAAlerts() {
+                    if (getSetting('nasaAlerts', true)) {
+                        setTimeout(function() {
+                            if (getSetting('nasaAlerts', true)) fetchAllNASASources();
+                        }, 5000);
+                        setInterval(function() {
+                            if (getSetting('nasaAlerts', true)) fetchAllNASASources();
+                        }, 15 * 60 * 1000);
+                    }
+                }
+                scheduleNASAAlerts();
+
+                // بدء جدولة تحديث طبقة الطقس
+                scheduleWeatherRefresh();
+
+                // ربط الوظائف العامة
+                window.openReportFromMap = openReportFromMap;
+                window.deleteStation = deleteStation;
+                window.editStation = editStation;
+                window.flyToStation = flyToStation;
+                window.updateReportStatus = updateReportStatus;
+                window.selectFireReport = selectFireReport;
+                window.navigateToSelectedFire = navigateToSelectedFire;
+                window.addCrewToFire = addCrewToFire;
+                window.fetchAllNASASources = fetchAllNASASources;
+                window.testNASAConnection = testNASAConnection;
+                window.simulateNASAFire = simulateNASAFire;
+                window.reportFromNASA = reportFromNASA;
+                window.whatsappFromNASA = whatsappFromNASA;
+                window.smsFromNASA = smsFromNASA;
+                window.selectReportFromList = selectReportFromList;
+                window.manageFireFromNASA = manageFireFromNASA;
+                window.sendSMS = sendSMS;
+                window.sendWhatsAppMessage = sendWhatsAppMessage;
+                window.locateUser = locateUser;
+
+                setTimeout(hideSplash, 500);
+                window.addEventListener('load', function() { setTimeout(hideSplash, 500); });
+            }
+
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initApp);
+            else initApp();
+
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('./sw.js').then(function(registration) {
+                        console.log('Service Worker مسجل بنجاح، النطاق:', registration.scope);
+                    }).catch(function(error) {
+                        console.log('فشل تسجيل Service Worker:', error);
+                    });
+                });
+            }
+
+        })();
+    </script>
+</body>
+</html>
